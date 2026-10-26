@@ -1,0 +1,31 @@
+:root { --bg:#17181f; --panel:#2b2d38; --acc:#3d5afe; --txt:#e8e9f0; --dim:#9a9db0; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--txt); font:16px/1.4 system-ui, sans-serif; }
+[hidden] { display:none !important; }
+.dim { color:var(--dim); }
+.login { max-width:420px; margin:0 auto; padding:24px 16px; display:flex; flex-direction:column; gap:10px; }
+.login h1 { margin:0; font-size:26px; }
+.err { color:#ff7a7a; min-height:20px; }
+.sheet-btn.alt { background:var(--panel); border:1px solid #454860; }
+.top { display:flex; justify-content:space-between; gap:8px; padding:8px 12px; background:var(--panel); }
+.loc { font-size:14px; color:var(--dim); text-align:right; }
+.mapwrap { padding:8px; }
+#map { width:100%; display:block; border-radius:10px; touch-action:none; background:#101117; }
+.tabs { display:flex; gap:4px; padding:0 8px; }
+.tabs button { flex:1; min-height:42px; border:0; border-radius:8px 8px 0 0; background:var(--panel); color:var(--dim); font:inherit; }
+.tabs button.on { background:var(--acc); color:#fff; }
+.panel { padding:8px; max-width:760px; margin:0 auto; }
+.profile { display:grid; grid-template-columns:1fr 1fr 70px; gap:6px; margin-bottom:8px; }
+.dice, .row { display:flex; gap:6px; margin:6px 0; }
+.log { display:flex; flex-direction:column; gap:6px; }
+.log div { background:var(--panel); border-radius:8px; padding:8px 10px; font-size:15px; overflow-wrap:anywhere; }
+.log .story { border-left:3px solid #ffd54f; }
+.log .dice { border-left:3px solid var(--acc); }
+.chat { display:flex; flex-direction:column; gap:6px; max-height:40vh; overflow:auto; margin-bottom:8px; }
+.chat div { padding:8px 10px; border-radius:8px; background:var(--panel); overflow-wrap:anywhere; white-space:pre-wrap; }
+.chat .me { background:#25306b; }
+.proposal { background:var(--panel); border:1px solid var(--acc); border-radius:10px; padding:10px; margin-bottom:8px; display:flex; flex-direction:column; gap:6px; }
+.keybox { font-size:13px; color:var(--dim); margin-bottom:8px; overflow-wrap:anywhere; }
+.manual { margin-top:12px; display:flex; flex-direction:column; gap:6px; }
+.manual > * { margin-top:6px; }
+#ai-send { margin-top:6px; width:100%; }

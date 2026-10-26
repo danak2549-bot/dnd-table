@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Стол приключений</title>
+<link rel="stylesheet" href="sheet.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<section id="login" class="login">
+  <h1>Стол приключений</h1>
+  <p class="dim">Заходите по коду комнаты. Мастер создаёт комнату и делится кодом.</p>
+  <input id="l-name" class="sheet-input" placeholder="Имя героя" maxlength="40">
+  <input id="l-code" class="sheet-input" placeholder="Код комнаты" maxlength="8">
+  <button id="l-join" class="sheet-btn" type="button">Войти игроком</button>
+  <hr>
+  <button id="l-create" class="sheet-btn alt" type="button">Создать комнату (я мастер)</button>
+  <input id="l-key" class="sheet-input" placeholder="Ключ мастера, чтобы вернуться" >
+  <button id="l-master" class="sheet-btn alt" type="button">Войти мастером</button>
+  <div id="l-err" class="err" role="alert"></div>
+</section>
+
+<main id="game" hidden>
+  <header class="top">
+    <div><strong id="room-code"></strong> <span id="role" class="dim"></span></div>
+    <div id="loc" class="loc"></div>
+  </header>
+  <div class="mapwrap"><canvas id="map"></canvas></div>
+  <nav class="tabs" id="tabs">
+    <button data-tab="sheet" class="on" type="button">Лист</button>
+    <button data-tab="log" type="button">События</button>
+    <button data-tab="master" type="button" id="tab-master" hidden>Мастер</button>
+  </nav>
+  <section id="p-sheet" class="panel">
+    <div id="profile" class="profile" hidden>
+      <input id="pr-race" class="sheet-input" placeholder="Раса" maxlength="40">
+      <input id="pr-class" class="sheet-input" placeholder="Класс" maxlength="40">
+      <input id="pr-level" class="sheet-input sheet-num" type="number" min="1" max="30" placeholder="Ур.">
+    </div>
+    <div id="sheet"></div>
+  </section>
+  <section id="p-log" class="panel" hidden>
+    <div class="dice">
+      <input id="dice-expr" class="sheet-input" value="1d20" maxlength="12" aria-label="Кубы">
+      <button id="dice-go" class="sheet-btn" type="button">Бросить</button>
+    </div>
+    <div id="log" class="log"></div>
+  </section>
+  <section id="p-master" class="panel" hidden>
+    <div class="keybox">Ключ мастера (сохраните): <code id="mkey"></code></div>
+    <div id="chat" class="chat"></div>
+    <div id="proposal" class="proposal" hidden>
+      <div id="prop-list"></div>
+      <button id="apply" class="sheet-btn" type="button">Применить для всех</button>
+      <button id="discard" class="sheet-btn alt" type="button">Отклонить</button>
+    </div>
+    <textarea id="ai-text" class="sheet-input" rows="2" placeholder="Например: придумай засаду гоблинов в лесу"></textarea>
+    <button id="ai-send" class="sheet-btn" type="button">Спросить ИИ</button>
+    <details class="manual">
+      <summary>Вручную</summary>
+      <div class="row"><input id="m-name" class="sheet-input" placeholder="Имя врага/НПС"><input id="m-hp" class="sheet-input sheet-num" type="number" value="10"></div>
+      <div class="row"><button id="m-enemy" class="sheet-btn" type="button">+ Враг</button><button id="m-npc" class="sheet-btn alt" type="button">+ НПС</button></div>
+      <input id="m-locname" class="sheet-input" placeholder="Название локации">
+      <textarea id="m-locdesc" class="sheet-input" rows="2" placeholder="Описание локации"></textarea>
+      <button id="m-loc" class="sheet-btn" type="button">Показать игрокам</button>
+      <div class="row"><input id="m-w" class="sheet-input sheet-num" type="number" placeholder="Шир."><input id="m-h" class="sheet-input sheet-num" type="number" placeholder="Выс."></div>
+      <input id="m-bg" class="sheet-input" placeholder="Ссылка на картинку карты (https://…)">
+      <button id="m-map" class="sheet-btn" type="button">Обновить карту</button>
+      <button id="m-del" class="sheet-btn alt" type="button">Удалить выбранный токен</button>
+      <button id="m-hide" class="sheet-btn alt" type="button">Скрыть/показать выбранный</button>
+    </details>
+  </section>
+</main>
+<script src="/socket.io/socket.io.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
