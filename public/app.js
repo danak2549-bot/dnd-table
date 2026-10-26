@@ -1,5 +1,5 @@
 import { mountSheet } from './sheet.js';
-import { drawMap, hitToken, cellFromEvent } from './map.js';
+import { drawMap, hitToken, cellFromEvent, MAXZ } from './map.js';
 
 const $ = (s) => document.querySelector(s);
 const socket = io();
@@ -10,6 +10,7 @@ const store = {
 let me = { role: null, pid: store.get('pid') || 'p' + Math.random().toString(36).slice(2, 12), code: '' };
 store.set('pid', me.pid);
 let state = null, selId = null, drag = null, proposal = [];
+let view = { s: 1, x: 0, y: 0 };
 
 const selected = () => state?.tokens.find((t) => t.id === selId) || null;
 const ownToken = () => state?.tokens.find((t) => t.owner === me.pid) || null;
@@ -68,7 +69,7 @@ function renderAll() {
   }
   renderLog(); redraw();
 }
-const redraw = () => state && drawMap($('#map'), state, selId);
+const redraw = () => state && drawMap($('#map'), state, selId, view);
 window.addEventListener('resize', redraw);
 
 function renderLog() {
@@ -90,26 +91,76 @@ for (const [id, key] of [['#pr-race', 'race'], ['#pr-class', 'class'], ['#pr-lev
   });
 }
 
-// ---------- карта: выбор и перетаскивание ----------
+// ---------- карта: выбор, перетаскивание, масштаб ----------
 const map = $('#map');
-map.addEventListener('pointerdown', (e) => {
-  const c = cellFromEvent(map, state, e);
-  const t = hitToken(state, c);
-  if (!t) return;
-  selId = t.id; renderAll();
-  if (canEditTok(t)) { drag = { id: t.id, moved: false }; map.setPointerCapture(e.pointerId); }
-});
-map.addEventListener('pointermove', (e) => {
-  if (!drag) return;
-  const t = state.tokens.find((x) => x.id === drag.id), c = cellFromEvent(map, state, e);
-  if (t.x !== c.x || t.y !== c.y) { t.x = c.x; t.y = c.y; drag.moved = true; redraw(); }
-});
-map.addEventListener('pointerup', () => {
+const ptrs = new Map();
+let pan = null, pinch = null;
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+function zoomAt(cx, cy, ns) {
+  ns = Math.max(1, Math.min(MAXZ, ns));
+  const k = ns / view.s;
+  view.x = cx - (cx - view.x) * k; view.y = cy - (cy - view.y) * k; view.s = ns;
+  redraw();
+}
+function finishDrag() {
   if (!drag) return;
   const t = state.tokens.find((x) => x.id === drag.id);
   if (drag.moved && t) socket.emit('token:move', { id: t.id, x: t.x, y: t.y }, () => {});
   drag = null;
+}
+map.addEventListener('pointerdown', (e) => {
+  map.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size === 2) {
+    finishDrag(); pan = null;
+    const [a, b] = [...ptrs.values()];
+    pinch = { d: dist(a, b) || 1, s: view.s };
+    return;
+  }
+  const t = hitToken(state, cellFromEvent(map, state, e, view));
+  if (t) {
+    selId = t.id; renderAll();
+    if (canEditTok(t)) drag = { id: t.id, moved: false };
+  } else {
+    pan = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+  }
 });
+map.addEventListener('pointermove', (e) => {
+  if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && ptrs.size >= 2) {
+    const [a, b] = [...ptrs.values()], r = map.getBoundingClientRect();
+    zoomAt((a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top, pinch.s * dist(a, b) / pinch.d);
+  } else if (drag) {
+    const t = state.tokens.find((x) => x.id === drag.id), c = cellFromEvent(map, state, e, view);
+    if (t.x !== c.x || t.y !== c.y) { t.x = c.x; t.y = c.y; drag.moved = true; redraw(); }
+  } else if (pan) {
+    view.x = pan.vx + (e.clientX - pan.x); view.y = pan.vy + (e.clientY - pan.y); redraw();
+  }
+});
+const endPtr = (e) => {
+  ptrs.delete(e.pointerId);
+  if (ptrs.size < 2) pinch = null;
+  finishDrag(); pan = null;
+};
+map.addEventListener('pointerup', endPtr);
+map.addEventListener('pointercancel', endPtr);
+map.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const r = map.getBoundingClientRect();
+  zoomAt(e.clientX - r.left, e.clientY - r.top, view.s * (e.deltaY < 0 ? 1.25 : 0.8));
+}, { passive: false });
+const mid = () => { const r = map.getBoundingClientRect(); return [r.width / 2, r.height / 2]; };
+$('#z-in').onclick = () => zoomAt(...mid(), view.s * 1.5);
+$('#z-out').onclick = () => zoomAt(...mid(), view.s / 1.5);
+$('#z-reset').onclick = () => { view = { s: 1, x: 0, y: 0 }; redraw(); };
+$('#z-focus').onclick = () => {
+  const t = selected(); if (!t) return;
+  const r = map.getBoundingClientRect(), cell = r.width / state.map.w;
+  view.s = Math.max(view.s, 3);
+  view.x = r.width / 2 - (t.x + 0.5) * cell * view.s;
+  view.y = r.height / 2 - (t.y + 0.5) * cell * view.s;
+  redraw();
+};
 
 // ---------- вкладки ----------
 $('#tabs').addEventListener('click', (e) => {
@@ -155,6 +206,7 @@ const add = (type) => socket.emit('token:add', { name: $('#m-name').value, type,
 $('#m-enemy').onclick = () => add('enemy');
 $('#m-npc').onclick = () => add('npc');
 $('#m-loc').onclick = () => socket.emit('location:set', { name: $('#m-locname').value, description: $('#m-locdesc').value }, () => {});
+$('#m-world').onclick = () => socket.emit('map:set', { w: 40, h: 28, bg: '/world.jpg' }, () => {});
 $('#m-map').onclick = () => socket.emit('map:set', { w: +$('#m-w').value || state.map.w, h: +$('#m-h').value || state.map.h, bg: $('#m-bg').value }, () => {});
 $('#m-del').onclick = () => selId && confirm('Удалить токен?') && socket.emit('token:remove', { id: selId }, () => {});
 $('#m-hide').onclick = () => { const t = selected(); if (t) socket.emit('token:hide', { id: t.id, hidden: !t.hidden }, () => {}); };

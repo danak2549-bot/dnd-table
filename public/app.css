@@ -9,7 +9,9 @@ body { margin:0; background:var(--bg); color:var(--txt); font:16px/1.4 system-ui
 .sheet-btn.alt { background:var(--panel); border:1px solid #454860; }
 .top { display:flex; justify-content:space-between; gap:8px; padding:8px 12px; background:var(--panel); }
 .loc { font-size:14px; color:var(--dim); text-align:right; }
-.mapwrap { padding:8px; }
+.mapwrap { padding:8px; position:relative; }
+.zoom { position:absolute; right:14px; top:14px; display:flex; flex-direction:column; gap:6px; }
+.zoom button { width:40px; height:40px; border:0; border-radius:10px; background:rgba(20,22,30,.82); color:#fff; font-size:20px; }
 #map { width:100%; display:block; border-radius:10px; touch-action:none; background:#101117; }
 .tabs { display:flex; gap:4px; padding:0 8px; }
 .tabs button { flex:1; min-height:42px; border:0; border-radius:8px 8px 0 0; background:var(--panel); color:var(--dim); font:inherit; }

@@ -26,7 +26,15 @@
     <div><strong id="room-code"></strong> <span id="role" class="dim"></span></div>
     <div id="loc" class="loc"></div>
   </header>
-  <div class="mapwrap"><canvas id="map"></canvas></div>
+  <div class="mapwrap">
+    <canvas id="map"></canvas>
+    <div class="zoom">
+      <button id="z-in" type="button" aria-label="Приблизить">+</button>
+      <button id="z-out" type="button" aria-label="Отдалить">−</button>
+      <button id="z-focus" type="button" aria-label="К выбранному токену">◎</button>
+      <button id="z-reset" type="button" aria-label="Вся карта">⤢</button>
+    </div>
+  </div>
   <nav class="tabs" id="tabs">
     <button data-tab="sheet" class="on" type="button">Лист</button>
     <button data-tab="log" type="button">События</button>
@@ -66,6 +74,7 @@
       <button id="m-loc" class="sheet-btn" type="button">Показать игрокам</button>
       <div class="row"><input id="m-w" class="sheet-input sheet-num" type="number" placeholder="Шир."><input id="m-h" class="sheet-input sheet-num" type="number" placeholder="Выс."></div>
       <input id="m-bg" class="sheet-input" placeholder="Ссылка на картинку карты (https://…)">
+      <button id="m-world" class="sheet-btn alt" type="button">Карта мира (40×28)</button>
       <button id="m-map" class="sheet-btn" type="button">Обновить карту</button>
       <button id="m-del" class="sheet-btn alt" type="button">Удалить выбранный токен</button>
       <button id="m-hide" class="sheet-btn alt" type="button">Скрыть/показать выбранный</button>

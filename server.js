@@ -35,6 +35,21 @@ const int = (v, min, max, d = 0) => {
 };
 const str = (v, n) => String(v ?? '').slice(0, n);
 const COLORS = ['#e57373', '#64b5f6', '#81c784', '#ffd54f', '#ba68c8', '#4db6ac', '#ff8a65', '#a1887f'];
+// Карта мира 1499x1049 px -> сетка 40x28. Ориентиры в пикселях картинки.
+const GRID_W = 40, GRID_H = 28;
+const LANDMARKS = [
+  ['Лорнэйдар (город эльфов)', 275, 125], ['Траун (королевство эльфов)', 350, 330], ['Деревня Маунтайн', 410, 470],
+  ['Горы Серебряного Клыка', 700, 90], ['Деревня Василиск', 690, 150], ['Дремучий Лес', 950, 170],
+  ['Грозовой Пик', 1200, 135], ['Морской Утес', 1395, 255], ['Соленый Порт', 1390, 400],
+  ['Каменный Град (Марокко, королевство людей)', 650, 380], ['Пещера Эха', 665, 525],
+  ['Стальград (столица Аарда, королевство людей)', 990, 490], ['Золотонка', 830, 520], ['Старый Мост', 1190, 580],
+  ['Дубравное', 960, 630], ['Вечнозелёный Лес', 540, 675], ['Тихие Топи', 270, 535],
+  ['Мираж (королевство полуросликов)', 715, 760], ['Хоббитон', 700, 850],
+  ['Королевство дварфов Магор', 1100, 930], ['Подземные Глубины', 1150, 870],
+  ['Красное Ущелье', 1350, 550], ['Каньон Страха', 1355, 670], ['Пески Забвения', 1360, 955],
+  ['Остров Отчаяния', 305, 910],
+].map(([name, px, py]) => ({ name, x: Math.round((px / 1499) * GRID_W), y: Math.round((py / 1049) * GRID_H) }));
+const SPAWN = LANDMARKS.find((l) => l.name.startsWith('Стальград'));
 const SLOTS = ['head', 'body', 'hands', 'legs', 'feet', 'accessory'];
 
 const res = (v) => { const max = int(v?.max, 0, 9999); return { cur: int(v?.cur, 0, 9999), max }; };
@@ -81,16 +96,22 @@ function newCharacter(hp = 20, mana = 10) {
 
 function freeCell(room) {
   const taken = new Set(Object.values(room.tokens).map((t) => t.x + ',' + t.y));
+  const sp = room.spawn || { x: 0, y: 0 };
+  let best = null, bd = Infinity;
   for (let y = 0; y < room.map.h; y++)
-    for (let x = 0; x < room.map.w; x++) if (!taken.has(x + ',' + y)) return { x, y };
-  return { x: 0, y: 0 };
+    for (let x = 0; x < room.map.w; x++) {
+      if (taken.has(x + ',' + y)) continue;
+      const d = (x - sp.x) ** 2 + (y - sp.y) ** 2;
+      if (d < bd) { bd = d; best = { x, y }; }
+    }
+  return best || { x: 0, y: 0 };
 }
 
 function createRoom() {
   const room = {
     code: rid(5).toUpperCase(), masterKey: rid(16),
-    map: { w: 20, h: 14, bg: '' },
-    tokens: {}, log: [], location: { name: 'Начало пути', description: '' }, chat: [],
+    map: { w: GRID_W, h: GRID_H, bg: '/world.jpg' }, spawn: { x: SPAWN.x, y: SPAWN.y },
+    tokens: {}, log: [], location: { name: 'Стальград', description: 'Столица Аарда. Отсюда начинается путь.' }, chat: [],
   };
   rooms.set(room.code, room);
   save();
@@ -179,7 +200,12 @@ async function askClaude(room, text) {
   };
   const system = 'Ты помощник мастера настольной игры в стиле D&D. Отвечай по-русски, кратко и атмосферно. ' +
     'Изменения на карте и в мире делай ТОЛЬКО через инструменты, координаты в пределах карты (с нуля). ' +
-    'Не придумывай токены, которых нет в списке, для move_token и set_hp. Текущее состояние: ' + JSON.stringify(world);
+    'Не придумывай токены, которых нет в списке, для move_token и set_hp. ' +
+    (room.map.bg === '/world.jpg'
+      ? 'Карта мира: сетка 40x28, одна клетка около 15 км. Север вверху. Море по краям (особенно слева, снизу и сверху справа), не ставь туда токены. Ориентиры (клетка x,y): ' +
+        LANDMARKS.map((l) => `${l.name} (${l.x},${l.y})`).join('; ') + '. Для засад и встреч ставь токены на сушу рядом с подходящим ориентиром, на разных клетках. '
+      : '') +
+    'Текущее состояние: ' + JSON.stringify(world);
   room.chat.push({ role: 'user', content: text });
   room.chat = room.chat.slice(-12);
   let reply = '';
@@ -337,7 +363,8 @@ io.on('connection', (socket) => {
     const r = room(); if (!r || !master()) return ack({ ok: false });
     r.map.w = int(d.w, 5, 60, r.map.w);
     r.map.h = int(d.h, 5, 60, r.map.h);
-    r.map.bg = /^https?:\/\/\S{1,500}$/.test(d.bg || '') ? d.bg : '';
+    r.map.bg = /^(https?:\/\/\S{1,500}|\/[\w.-]{1,60})$/.test(d.bg || '') ? d.bg : '';
+    if (r.map.bg === '/world.jpg') r.spawn = { x: SPAWN.x, y: SPAWN.y };
     for (const t of Object.values(r.tokens)) Object.assign(t, clampPos(r, t.x, t.y));
     ack({ ok: true });
     emitState(r);
