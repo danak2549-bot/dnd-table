@@ -94,18 +94,120 @@ function newCharacter(hp = 20, mana = 10) {
   };
 }
 
+const dims = (room) => (room.scene ? { w: room.scene.w, h: room.scene.h } : { w: room.map.w, h: room.map.h });
+
+// ---------- генератор локаций (город, деревня, замок) ----------
+const BUILD = {
+  smithy: [4, 3], tavern: [5, 3], market: [5, 3], temple: [4, 4], shop: [4, 3], alchemist: [4, 3],
+  stable: [5, 3], guild: [5, 3], castle: [7, 5], tower: [3, 3], mill: [4, 3], farm: [4, 3],
+  barracks: [5, 3], inn: [5, 3], well: [1, 1], house: [3, 3],
+};
+const SIZES = { small: [28, 20, 6], medium: [36, 24, 12], large: [44, 30, 20] };
+function buildScene(spec) {
+  const [w, h, nHouses] = SIZES[spec.size] || SIZES.medium;
+  const tiles = Array.from({ length: h }, () => Array(w).fill('.'));
+  const occ = Array.from({ length: h }, () => Array(w).fill(false));
+  const cx = Math.floor(w / 2), cy = Math.floor(h / 2), m = 2;
+  const set = (x, y, c) => { if (x >= 0 && y >= 0 && x < w && y < h) tiles[y][x] = c; };
+  const road = (x, y) => { if (x < 0 || y < 0 || x >= w || y >= h) return; tiles[y][x] = tiles[y][x] === 'w' ? 'b' : 'r'; };
+  if (spec.river) {
+    const base = Math.floor(w * 0.2);
+    for (let y = 0; y < h; y++) { const x = base + Math.round(Math.sin(y / 3) * 1.5); set(x, y, 'w'); set(x + 1, y, 'w'); }
+  }
+  for (let x = 0; x < w; x++) { road(x, cy); road(x, cy + 1); }
+  for (let y = spec.size === 'small' ? cy : 0; y < h; y++) { road(cx, y); road(cx + 1, y); }
+  if (spec.walls) {
+    for (let x = 0; x < w; x++) for (const y of [0, h - 1]) if (tiles[y][x] === '.') tiles[y][x] = 'W';
+    for (let y = 0; y < h; y++) for (const x of [0, w - 1]) if (tiles[y][x] === '.') tiles[y][x] = 'W';
+  }
+  const free = (x, y, bw, bh) => {
+    if (x < m || y < m || x + bw > w - m || y + bh > h - m) return false;
+    for (let j = y; j < y + bh; j++) for (let i = x; i < x + bw; i++) if (tiles[j][i] !== '.' || occ[j][i]) return false;
+    return true;
+  };
+  const nearRoad = (x, y, bw, bh) => {
+    for (let j = y - 1; j <= y + bh; j++) for (let i = x - 1; i <= x + bw; i++) {
+      const c = tiles[j]?.[i]; if (c === 'r' || c === 'b') return true;
+    }
+    return false;
+  };
+  const buildings = [];
+  const place = (type, name, tx, ty) => {
+    const [bw, bh] = BUILD[type] || BUILD.house;
+    let best = null, bc = Infinity;
+    for (let y = m; y < h - m; y++) for (let x = m; x < w - m; x++) {
+      if (!free(x, y, bw, bh)) continue;
+      const c = Math.hypot(x + bw / 2 - tx, y + bh / 2 - ty) + (nearRoad(x, y, bw, bh) ? 0 : 7) + Math.random() * 3;
+      if (c < bc) { bc = c; best = { x, y }; }
+    }
+    if (!best) return;
+    for (let j = best.y; j < best.y + bh; j++) for (let i = best.x; i < best.x + bw; i++) occ[j][i] = true;
+    buildings.push({ type, name: String(name || '').slice(0, 40), x: best.x, y: best.y, w: bw, h: bh });
+  };
+  const list = (Array.isArray(spec.buildings) ? spec.buildings : []).slice(0, 30).filter((b) => BUILD[b?.type]);
+  for (const b of list) {
+    if (b.type === 'castle') place('castle', b.name, cx, 4);
+    else if (b.type === 'tower') place('tower', b.name, w - 5, 4);
+    else if (['farm', 'mill', 'stable'].includes(b.type)) place(b.type, b.name, Math.random() < 0.5 ? 5 : w - 6, h - 5);
+    else place(b.type, b.name, cx + (Math.random() - 0.5) * 8, cy + (Math.random() - 0.5) * 6);
+  }
+  for (let i = 0; i < nHouses; i++) place('house', 'Дом', cx + (Math.random() - 0.5) * w * 0.7, cy + (Math.random() - 0.5) * h * 0.7);
+  const edge = spec.forest ? 5 : 2;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (tiles[y][x] !== '.' || occ[y][x]) continue;
+    let near = false;
+    for (let j = y - 1; j <= y + 1; j++) for (let i = x - 1; i <= x + 1; i++) if (occ[j]?.[i]) near = true;
+    if (near) continue;
+    const d = Math.min(x, y, w - 1 - x, h - 1 - y);
+    const p = (spec.forest ? 0.1 : 0.03) + (d < edge ? (spec.forest ? 0.4 : 0.1) : 0);
+    if (Math.random() < p) tiles[y][x] = 't';
+  }
+  return {
+    name: String(spec.name || 'Поселение').slice(0, 80), kind: spec.kind || 'village',
+    description: String(spec.description || '').slice(0, 1500),
+    w, h, tiles: tiles.map((r) => r.join('')), buildings, spawn: { x: 2, y: cy },
+  };
+}
+
 function freeCell(room) {
-  const taken = new Set(Object.values(room.tokens).map((t) => t.x + ',' + t.y));
-  const sp = room.spawn || { x: 0, y: 0 };
+  const taken = new Set(Object.values(room.tokens).filter((t) => !t.away && t.x >= 0).map((t) => t.x + ',' + t.y));
+  const sp = room.scene ? room.scene.spawn : room.spawn || { x: 0, y: 0 };
+  const D = dims(room);
   let best = null, bd = Infinity;
-  for (let y = 0; y < room.map.h; y++)
-    for (let x = 0; x < room.map.w; x++) {
+  for (let y = 0; y < D.h; y++)
+    for (let x = 0; x < D.w; x++) {
       if (taken.has(x + ',' + y)) continue;
+      if (room.scene) {
+        const c = room.scene.tiles[y][x];
+        if (c !== '.' && c !== 'r') continue;
+        if (room.scene.buildings.some((b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h)) continue;
+      }
       const d = (x - sp.x) ** 2 + (y - sp.y) ** 2;
       if (d < bd) { bd = d; best = { x, y }; }
     }
   return best || { x: 0, y: 0 };
 }
+
+function openScene(room, spec) {
+  for (const t of Object.values(room.tokens)) {
+    if (t.wx == null) { t.wx = t.x; t.wy = t.y; }
+    if (t.type !== 'player') t.away = true;
+  }
+  room.scene = buildScene(spec);
+  for (const t of Object.values(room.tokens)) if (t.type === 'player') { t.x = -99; t.y = -99; }
+  for (const t of Object.values(room.tokens)) if (t.type === 'player') Object.assign(t, freeCell(room));
+}
+function closeScene(room) {
+  room.scene = null;
+  for (const [id, t] of Object.entries(room.tokens)) {
+    if (t.wx != null) { t.x = t.wx; t.y = t.wy; delete t.wx; delete t.wy; delete t.away; }
+    else if (t.type !== 'player') delete room.tokens[id];
+    else { t.x = -99; t.y = -99; }
+  }
+  for (const t of Object.values(room.tokens)) if (t.x === -99) Object.assign(t, freeCell(room));
+}
+const sceneNote = (room) => `Сейчас открыта локация «${room.scene.name}» (вид сверху), сетка ${room.scene.w}x${room.scene.h}, вход слева (${room.scene.spawn.x},${room.scene.spawn.y}). Здания (x,y левый верхний угол, ширина x высота): ` +
+  room.scene.buildings.filter((b) => b.type !== 'house').map((b) => `${b.name || b.type} [${b.type}] (${b.x},${b.y}, ${b.w}x${b.h})`).join('; ') + '. Токены ставь на свободные клетки вне зданий. Чтобы вернуться на карту мира, вызови close_location. ';
 
 function createRoom() {
   const room = {
@@ -122,7 +224,7 @@ function addToken(room, { name, type, x, y, owner = null, character, hidden = fa
   const pos = x == null || y == null ? freeCell(room) : { x, y };
   const t = {
     id: 't' + rid(8), name: str(name, 40) || 'Безымянный', type,
-    x: int(pos.x, 0, room.map.w - 1), y: int(pos.y, 0, room.map.h - 1),
+    x: int(pos.x, 0, dims(room).w - 1), y: int(pos.y, 0, dims(room).h - 1),
     owner, hidden,
     color: type === 'enemy' ? '#c0392b' : type === 'npc' ? '#8e8e8e' : COLORS[Object.keys(room.tokens).length % COLORS.length],
     character: character || newCharacter(),
@@ -153,8 +255,8 @@ function emitState(room) {
     if (s.data.code !== room.code) continue;
     const master = s.data.role === 'master';
     s.emit('state:sync', {
-      map: room.map, location: room.location,
-      tokens: Object.values(room.tokens).filter((t) => master || !t.hidden).map((t) => viewToken(t, s)),
+      map: room.scene ? { w: room.scene.w, h: room.scene.h, bg: '' } : room.map, scene: room.scene || null, location: room.location,
+      tokens: Object.values(room.tokens).filter((t) => !t.away && (master || !t.hidden)).map((t) => viewToken(t, s)),
       log: room.log.slice(-60),
     });
   }
@@ -185,14 +287,22 @@ const TOOLS = [
     input_schema: obj({ title: { type: 'string' }, description: { type: 'string' },
       enemies: { type: 'array', items: obj({ name: { type: 'string' }, hp: { type: 'integer' },
         x: { type: 'integer' }, y: { type: 'integer' } }, ['name', 'hp', 'x', 'y']) } }, ['title', 'description', 'enemies']) },
+  { name: 'open_location', description: 'Открыть вид сверху на город, деревню, порт или замок: сервер сам нарисует план с дорогами, домами и указанными зданиями. Используй, когда мастер просит показать или открыть поселение. Типы зданий: smithy кузня, tavern таверна, market рынок, temple храм, shop лавка, alchemist алхимик, stable конюшня, guild гильдия, castle замок, tower башня, mill мельница, farm ферма, barracks казармы, inn постоялый двор, well колодец. Дома добавятся сами.',
+    input_schema: obj({
+      name: { type: 'string' }, kind: { type: 'string', enum: ['village', 'city', 'port', 'fort'] },
+      description: { type: 'string' }, size: { type: 'string', enum: ['small', 'medium', 'large'] },
+      walls: { type: 'boolean' }, river: { type: 'boolean' }, forest: { type: 'boolean' },
+      buildings: { type: 'array', items: obj({ type: { type: 'string', enum: Object.keys(BUILD).filter((k) => k !== 'house') }, name: { type: 'string' } }, ['type', 'name']) },
+    }, ['name', 'kind', 'description', 'buildings']) },
+  { name: 'close_location', description: 'Закрыть вид поселения и вернуть всех на карту мира.', input_schema: obj({}, []) },
 ];
 
 async function askClaude(room, text) {
   if (!GROQ_KEY && !KEY) throw new Error('ИИ не настроен: задайте GROQ_API_KEY (бесплатно) на сервере');
   const world = {
-    карта: { ширина: room.map.w, высота: room.map.h },
+    карта: { ширина: dims(room).w, высота: dims(room).h },
     локация: room.location,
-    токены: Object.values(room.tokens).map((t) => ({
+    токены: Object.values(room.tokens).filter((t) => !t.away).map((t) => ({
       имя: t.name, тип: t.type, x: t.x, y: t.y,
       хп: `${t.character.hp.cur}/${t.character.hp.max}`, мана: `${t.character.mana.cur}/${t.character.mana.max}`,
       раса: t.character.race, класс: t.character.class,
@@ -201,7 +311,8 @@ async function askClaude(room, text) {
   const system = 'Ты помощник мастера настольной игры в стиле D&D. Отвечай по-русски, кратко и атмосферно. ' +
     'Изменения на карте и в мире делай ТОЛЬКО через инструменты, координаты в пределах карты (с нуля). ' +
     'Не придумывай токены, которых нет в списке, для move_token и set_hp. ' +
-    (room.map.bg === '/world.jpg'
+    (room.scene ? sceneNote(room) : '') +
+    (!room.scene && room.map.bg === '/world.jpg'
       ? 'Карта мира: сетка 40x28, одна клетка около 15 км. Север вверху. Море по краям (особенно слева, снизу и сверху справа), не ставь туда токены. Ориентиры (клетка x,y): ' +
         LANDMARKS.map((l) => `${l.name} (${l.x},${l.y})`).join('; ') + '. Для засад и встреч ставь токены на сушу рядом с подходящим ориентиром, на разных клетках. '
       : '') +
@@ -245,7 +356,7 @@ async function askClaude(room, text) {
 }
 
 const byName = (room, n) => Object.values(room.tokens).find((t) => t.name.toLowerCase() === String(n).toLowerCase());
-const clampPos = (room, x, y) => ({ x: int(x, 0, room.map.w - 1), y: int(y, 0, room.map.h - 1) });
+const clampPos = (room, x, y) => ({ x: int(x, 0, dims(room).w - 1), y: int(y, 0, dims(room).h - 1) });
 
 function applyAction(room, a) {
   switch (a.type) {
@@ -272,6 +383,14 @@ function applyAction(room, a) {
     case 'describe_location':
       room.location = { name: str(a.name, 80), description: str(a.description, 1500) };
       log(room, `Локация: ${room.location.name}. ${room.location.description}`, 'story');
+      break;
+    case 'open_location':
+      openScene(room, a);
+      room.location = { name: str(a.name, 80), description: str(a.description, 1500) };
+      log(room, `Отряд входит: ${room.location.name}. ${room.location.description}`, 'story');
+      break;
+    case 'close_location':
+      if (room.scene) { closeScene(room); log(room, 'Отряд возвращается на карту мира'); }
       break;
     case 'generate_encounter':
       room.location = { name: str(a.title, 80), description: str(a.description, 1500) };
@@ -384,6 +503,13 @@ io.on('connection', (socket) => {
     if (!res2) return ack({ ok: false, error: 'Формат: 2d6+1' });
     const who = master() ? 'Мастер' : Object.values(r.tokens).find((t) => t.owner === socket.data.pid)?.name || 'Игрок';
     log(r, `🎲 ${who} бросает ${res2.expr}: [${res2.rolls.join(', ')}] = ${res2.total}`, 'dice');
+    ack({ ok: true });
+    emitState(r);
+  }));
+
+  socket.on('scene:close', safe((_, ack) => {
+    const r = room(); if (!r || !master()) return ack({ ok: false });
+    if (r.scene) { closeScene(r); log(r, 'Отряд возвращается на карту мира'); }
     ack({ ok: true });
     emitState(r);
   }));

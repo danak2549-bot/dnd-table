@@ -50,8 +50,11 @@ $('#l-master').onclick = () => {
 };
 
 // ---------- состояние ----------
+let lastScene = '';
 socket.on('state:sync', (s) => {
   state = s;
+  const sk = s.scene ? s.scene.name + s.scene.w : '';
+  if (sk !== lastScene) { lastScene = sk; view = { s: 1, x: 0, y: 0 }; }
   if (!selId || !s.tokens.some((t) => t.id === selId)) selId = ownToken()?.id || s.tokens[0]?.id || null;
   renderAll();
 });
@@ -183,6 +186,8 @@ function actionText(a) {
     case 'add_token': return `+ ${a.kind === 'npc' ? 'НПС' : 'Враг'} ${a.name}, ХП ${a.hp}, (${a.x}, ${a.y})`;
     case 'set_hp': return `ХП ${a.name}: ${a.value != null ? '=' + a.value : (a.delta > 0 ? '+' : '') + a.delta}`;
     case 'describe_location': return `Локация: ${a.name}`;
+    case 'open_location': return `Открыть: ${a.name} (${(a.buildings || []).map((b) => b.name || b.type).join(', ')})`;
+    case 'close_location': return 'Вернуться на карту мира';
     case 'generate_encounter': return `Бой «${a.title}»: ${(a.enemies || []).map((e) => e.name).join(', ')}`;
     default: return a.type;
   }
@@ -206,6 +211,7 @@ const add = (type) => socket.emit('token:add', { name: $('#m-name').value, type,
 $('#m-enemy').onclick = () => add('enemy');
 $('#m-npc').onclick = () => add('npc');
 $('#m-loc').onclick = () => socket.emit('location:set', { name: $('#m-locname').value, description: $('#m-locdesc').value }, () => {});
+$('#m-leave').onclick = () => socket.emit('scene:close', {}, () => {});
 $('#m-world').onclick = () => socket.emit('map:set', { w: 40, h: 28, bg: '/world.jpg' }, () => {});
 $('#m-map').onclick = () => socket.emit('map:set', { w: +$('#m-w').value || state.map.w, h: +$('#m-h').value || state.map.h, bg: $('#m-bg').value }, () => {});
 $('#m-del').onclick = () => selId && confirm('Удалить токен?') && socket.emit('token:remove', { id: selId }, () => {});
