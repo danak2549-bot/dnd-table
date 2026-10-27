@@ -37,10 +37,12 @@
   </div>
   <nav class="tabs" id="tabs">
     <button data-tab="sheet" class="on" type="button">Лист</button>
+    <button data-tab="inv" type="button">Вещи</button>
     <button data-tab="log" type="button">События</button>
     <button data-tab="master" type="button" id="tab-master" hidden>Мастер</button>
   </nav>
   <section id="p-sheet" class="panel">
+    <div id="avatar" class="avatar" hidden><div class="av-svg"></div><ul class="av-list"></ul></div>
     <div id="profile" class="profile" hidden>
       <input id="pr-race" class="sheet-input" placeholder="Раса" maxlength="40">
       <input id="pr-class" class="sheet-input" placeholder="Класс" maxlength="40">
@@ -48,6 +50,7 @@
     </div>
     <div id="sheet"></div>
   </section>
+  <section id="p-inv" class="panel" hidden><div id="inv"></div></section>
   <section id="p-log" class="panel" hidden>
     <div class="dice">
       <input id="dice-expr" class="sheet-input" value="1d20" maxlength="12" aria-label="Кубы">

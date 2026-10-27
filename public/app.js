@@ -1,4 +1,6 @@
 import { mountSheet } from './sheet.js';
+import { renderAvatar } from './avatar.js';
+import { mountInventory } from './inventory.js';
 import { drawMap, hitToken, cellFromEvent, MAXZ } from './map.js';
 
 const $ = (s) => document.querySelector(s);
@@ -16,6 +18,7 @@ const selected = () => state?.tokens.find((t) => t.id === selId) || null;
 const ownToken = () => state?.tokens.find((t) => t.owner === me.pid) || null;
 const canEditTok = (t) => !!t && (me.role === 'master' || t.owner === me.pid);
 
+const inv = mountInventory($('#inv'), { socket, getToken: selected });
 const sheet = mountSheet($('#sheet'), {
   socket, canEdit: () => canEditTok(selected()),
   getToken: () => selId,
@@ -64,6 +67,8 @@ socket.on('connect', () => { if (me.role && me.code) enter(me.code, store.get('n
 function renderAll() {
   $('#loc').textContent = state.location.name ? state.location.name + (state.location.description ? ' — ' + state.location.description : '') : '';
   sheet.render(selected());
+  renderAvatar($('#avatar'), selected());
+  inv.render(selected());
   const t = ownToken();
   if (t && me.role !== 'master' && t.character.race !== undefined) {
     for (const [id, v] of [['#pr-race', t.character.race], ['#pr-class', t.character.class], ['#pr-level', t.character.level]]) {
@@ -169,7 +174,7 @@ $('#z-focus').onclick = () => {
 $('#tabs').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   for (const x of $('#tabs').children) x.classList.toggle('on', x === b);
-  for (const n of ['sheet', 'log', 'master']) $('#p-' + n).hidden = n !== b.dataset.tab;
+  for (const n of ['sheet', 'inv', 'log', 'master']) $('#p-' + n).hidden = n !== b.dataset.tab;
 });
 
 // ---------- кубы ----------

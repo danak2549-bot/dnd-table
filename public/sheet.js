@@ -8,6 +8,8 @@ const SLOT_LABELS = {
   legs: 'Ноги',
   feet: 'Ступни',
   accessory: 'Аксессуар',
+  weapon: 'В правой руке',
+  offhand: 'В левой руке',
 };
 const SLOTS = Object.keys(SLOT_LABELS);
 const KINDS = [

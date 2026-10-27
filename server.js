@@ -50,7 +50,7 @@ const LANDMARKS = [
   ['Остров Отчаяния', 305, 910],
 ].map(([name, px, py]) => ({ name, x: Math.round((px / 1499) * GRID_W), y: Math.round((py / 1049) * GRID_H) }));
 const SPAWN = LANDMARKS.find((l) => l.name.startsWith('Стальград'));
-const SLOTS = ['head', 'body', 'hands', 'legs', 'feet', 'accessory'];
+const SLOTS = ['head', 'body', 'hands', 'legs', 'feet', 'accessory', 'weapon', 'offhand'];
 
 const res = (v) => { const max = int(v?.max, 0, 9999); return { cur: int(v?.cur, 0, 9999), max }; };
 const acts = (arr) => (Array.isArray(arr) ? arr : []).slice(0, 30).map((a) => ({
@@ -78,6 +78,9 @@ const SANITIZE = {
   weapons: acts, skills: acts, spells: acts,
   equipment: (o) => Object.fromEntries(SLOTS.map((s) => [s, str(o?.[s], 80)])),
   notes: (v) => str(v, 2000),
+  inventory: (arr) => (Array.isArray(arr) ? arr : []).slice(0, 40).map((i) => ({
+    id: str(i?.id, 40) || 'i' + rid(8), name: str(i?.name, 60), qty: int(i?.qty, 1, 999, 1), note: str(i?.note, 200),
+  })),
   race: (v) => str(v, 40),
   class: (v) => str(v, 40),
   level: (v) => int(v, 1, 30, 1),
@@ -88,7 +91,7 @@ function newCharacter(hp = 20, mana = 10) {
     race: '', class: '', level: 1,
     hp: { cur: hp, max: hp }, mana: { cur: mana, max: mana }, ap: { cur: 3, max: 3 },
     stats: { Сила: 10, Ловкость: 10, Интеллект: 10 },
-    weapons: [], skills: [], spells: [],
+    weapons: [], skills: [], spells: [], inventory: [],
     equipment: Object.fromEntries(SLOTS.map((s) => [s, ''])),
     notes: '',
   };
@@ -101,6 +104,7 @@ const BUILD = {
   smithy: [4, 3], tavern: [5, 3], market: [5, 3], temple: [4, 4], shop: [4, 3], alchemist: [4, 3],
   stable: [5, 3], guild: [5, 3], castle: [7, 5], tower: [3, 3], mill: [4, 3], farm: [4, 3],
   barracks: [5, 3], inn: [5, 3], well: [1, 1], house: [3, 3],
+  library: [5, 4], healer: [4, 3], palace: [8, 6], hut: [2, 2], elder: [4, 3],
 };
 const SIZES = { small: [28, 20, 6], medium: [36, 24, 12], large: [44, 30, 20] };
 function buildScene(spec) {
@@ -146,7 +150,8 @@ function buildScene(spec) {
   };
   const list = (Array.isArray(spec.buildings) ? spec.buildings : []).slice(0, 30).filter((b) => BUILD[b?.type]);
   for (const b of list) {
-    if (b.type === 'castle') place('castle', b.name, cx, 4);
+    if (b.type === 'castle' || b.type === 'palace') place(b.type, b.name, cx, 4);
+    else if (b.type === 'hut') place('hut', b.name, Math.random() < 0.5 ? 4 : w - 5, cy + (Math.random() < 0.5 ? -6 : 7));
     else if (b.type === 'tower') place('tower', b.name, w - 5, 4);
     else if (['farm', 'mill', 'stable'].includes(b.type)) place(b.type, b.name, Math.random() < 0.5 ? 5 : w - 6, h - 5);
     else place(b.type, b.name, cx + (Math.random() - 0.5) * 8, cy + (Math.random() - 0.5) * 6);
@@ -163,7 +168,7 @@ function buildScene(spec) {
     if (Math.random() < p) tiles[y][x] = 't';
   }
   return {
-    name: String(spec.name || 'Поселение').slice(0, 80), kind: spec.kind || 'village',
+    id: rid(8), name: String(spec.name || 'Поселение').slice(0, 80), kind: spec.kind || 'village',
     description: String(spec.description || '').slice(0, 1500),
     w, h, tiles: tiles.map((r) => r.join('')), buildings, spawn: { x: 2, y: cy },
   };
@@ -287,7 +292,7 @@ const TOOLS = [
     input_schema: obj({ title: { type: 'string' }, description: { type: 'string' },
       enemies: { type: 'array', items: obj({ name: { type: 'string' }, hp: { type: 'integer' },
         x: { type: 'integer' }, y: { type: 'integer' } }, ['name', 'hp', 'x', 'y']) } }, ['title', 'description', 'enemies']) },
-  { name: 'open_location', description: 'Открыть вид сверху на город, деревню, порт или замок: сервер сам нарисует план с дорогами, домами и указанными зданиями. Используй, когда мастер просит показать или открыть поселение. Типы зданий: smithy кузня, tavern таверна, market рынок, temple храм, shop лавка, alchemist алхимик, stable конюшня, guild гильдия, castle замок, tower башня, mill мельница, farm ферма, barracks казармы, inn постоялый двор, well колодец. Дома добавятся сами.',
+  { name: 'open_location', description: 'Открыть вид сверху на город, деревню, порт или замок: сервер сам нарисует план с дорогами, домами и указанными зданиями. Используй, когда мастер просит показать или открыть поселение. Типы зданий: smithy кузня, tavern таверна, market рынок, temple храм, shop лавка, alchemist алхимик, healer знахарь/лекарь, library библиотека, elder дом старосты/старшины, hut хижина, stable конюшня, guild гильдия, castle замок, palace дворец, tower башня, mill мельница, farm ферма, barracks казармы, inn постоялый двор, well колодец. Дворец и замок помещаются только в medium и large. Дома добавятся сами.',
     input_schema: obj({
       name: { type: 'string' }, kind: { type: 'string', enum: ['village', 'city', 'port', 'fort'] },
       description: { type: 'string' }, size: { type: 'string', enum: ['small', 'medium', 'large'] },
