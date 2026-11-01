@@ -22,15 +22,18 @@ function bfs(from, to) {
   return path.reverse();
 }
 
+let wScale = 1;
 function initWalkers(scene) {
-  walkers = []; roadSet = new Set(); roadList = []; sceneW = scene.w;
-  scene.tiles.forEach((row, y) => { for (let x = 0; x < scene.w; x++) if (row[x] === 'r' || row[x] === 'b') { roadSet.add(y * scene.w + x); roadList.push(y * scene.w + x); } });
+  walkers = []; roadSet = new Set(); roadList = [];
+  const grid = scene.walk ? scene.walk.rows : scene.tiles, gw = scene.walk ? scene.walk.w : scene.w;
+  sceneW = gw; wScale = scene.w / gw;
+  grid.forEach((row, y) => { for (let x = 0; x < gw; x++) if (row[x] === 'r' || row[x] === 'b') { roadSet.add(y * gw + x); roadList.push(y * gw + x); } });
   if (!roadList.length) return;
-  const n = { village: 5, town: 8, port: 8, fort: 4, city: 14, capital: 18 }[scene.kind] || 6;
+  const n = ({ village: 5, town: 8, port: 8, fort: 4, city: 14, capital: 18 }[scene.kind] || 6) * (scene.walk ? 1.2 : 1) | 0;
   for (let i = 0; i < n; i++) {
     const c = roadList[Math.floor(Math.random() * roadList.length)];
-    walkers.push({ x: (c % scene.w) + 0.5, y: Math.floor(c / scene.w) + 0.5, cell: c, path: [], wait: rnd(0, 3), speed: rnd(0.7, 1.3), face: 1, moving: false,
-      ox: rnd(-0.28, 0.28), oy: rnd(-0.2, 0.2), look: walkerLook(scene.culture || 'human', i) });
+    walkers.push({ x: ((c % sceneW) + 0.5) * wScale, y: (Math.floor(c / sceneW) + 0.5) * wScale, cell: c, path: [], wait: rnd(0, 3), speed: rnd(0.7, 1.3), face: 1, moving: false,
+      ox: rnd(-0.2, 0.2), oy: rnd(-0.15, 0.15), look: walkerLook(scene.culture || 'human', i) });
   }
 }
 
@@ -55,7 +58,7 @@ export function tickActors(state, dt, now) {
       w.path = bfs(w.cell, target);
       if (!w.path.length) { w.wait = rnd(1, 3); w.moving = false; continue; }
     }
-    const nx = (w.path[0] % sceneW) + 0.5 + w.ox, ny = Math.floor(w.path[0] / sceneW) + 0.5 + w.oy;
+    const nx = ((w.path[0] % sceneW) + 0.5) * wScale + w.ox * wScale, ny = (Math.floor(w.path[0] / sceneW) + 0.5) * wScale + w.oy * wScale;
     const dx = nx - w.x, dy = ny - w.y, dist = Math.hypot(dx, dy), st = w.speed * dt;
     if (dist <= st) { w.x = nx; w.y = ny; w.cell = w.path.shift(); if (!w.path.length) w.wait = Math.random() < 0.5 ? rnd(1, 4) : 0; }
     else { w.x += (dx / dist) * st; w.y += (dy / dist) * st; if (Math.abs(dx) > 0.01) w.face = dx > 0 ? 1 : -1; }

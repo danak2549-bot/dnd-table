@@ -4,6 +4,7 @@ import http from 'http';
 import fs from 'fs';
 import crypto from 'crypto';
 import { Server } from 'socket.io';
+import { FIXED_PLACES } from './places.js';
 
 const PORT = process.env.PORT || 3000;
 const FILE = process.env.DATA_FILE || './data.json';
@@ -41,15 +42,15 @@ const LANDMARKS = [
   ['Лорнэйдар (город эльфов)', 275, 125], ['Траун (королевство эльфов)', 350, 330], ['Деревня Маунтайн', 410, 470],
   ['Горы Серебряного Клыка', 700, 90], ['Деревня Василиск', 690, 150], ['Дремучий Лес', 950, 170],
   ['Грозовой Пик', 1200, 135], ['Морской Утес', 1395, 255], ['Соленый Порт', 1390, 400],
-  ['Каменный Град (Марокко, королевство людей)', 650, 380], ['Пещера Эха', 665, 525],
+  ['Каменный Град (столица дварфов, королевство Марокко)', 650, 380], ['Пещера Эха', 665, 525],
   ['Стальград (столица Аарда, королевство людей)', 990, 490], ['Золотонка', 830, 520], ['Старый Мост', 1190, 580],
   ['Дубравное', 960, 630], ['Вечнозелёный Лес', 540, 675], ['Тихие Топи', 270, 535],
   ['Мираж (королевство полуросликов)', 715, 760], ['Хоббитон', 700, 850],
-  ['Королевство дварфов Магор', 1100, 930], ['Подземные Глубины', 1150, 870],
+  ['Магор (столица орков)', 1100, 930], ['Подгорное Поселение', 525, 520], ['Глубинный Зал', 770, 335], ['Подземные Глубины', 1150, 870],
   ['Красное Ущелье', 1350, 550], ['Каньон Страха', 1355, 670], ['Пески Забвения', 1360, 955],
   ['Остров Отчаяния', 305, 910],
 ].map(([name, px, py]) => ({ name, x: Math.round((px / 1499) * GRID_W), y: Math.round((py / 1049) * GRID_H) }));
-const cultureOfName = (n) => (/эльф|Лорнэйдар|Траун|Маунтайн/.test(n) ? (n.includes('Маунтайн') ? 'human' : 'elf') : /полурос|Хоббитон|Мираж/.test(n) ? 'halfling' : /дварф|Магор|Подземн/.test(n) ? 'dwarf' : 'human');
+const cultureOfName = (n) => (/Лорнэйдар|Траун/.test(n) ? 'elf' : /Каменный|Эха|Маунтайн|Василиск|Клыка|Подгорн|Глубинный Зал/.test(n) ? 'dwarf' : /Мираж|Хоббитон/.test(n) ? 'halfling' : /Магор|Подземн|Ущелье|Каньон|Пески/.test(n) ? 'orc' : 'human');
 for (const l of LANDMARKS) l.culture = cultureOfName(l.name);
 const SPAWN = LANDMARKS.find((l) => l.name.startsWith('Стальград'));
 const SLOTS = ['head', 'body', 'hands', 'legs', 'feet', 'accessory', 'weapon', 'offhand'];
@@ -108,10 +109,14 @@ const BUILD = {
   barracks: [5, 3], inn: [5, 3], well: [1, 1], house: [3, 3],
   library: [5, 4], healer: [4, 3], palace: [8, 6], hut: [2, 2], elder: [4, 3], board: [2, 1],
 };
-const CULT = { human: 'людей', elf: 'эльфов', dwarf: 'дварфов', halfling: 'полуросликов' };
-const CULT_RACE = { human: 'человек', elf: 'эльф', dwarf: 'дварф', halfling: 'полурослик' };
-const pick = (a) => a[Math.floor(Math.random() * a.length)];
-const shuffle = (a) => a.map((v) => [Math.random(), v]).sort((p, q) => p[0] - q[0]).map((p) => p[1]);
+const CULT = { human: 'людей', elf: 'эльфов', dwarf: 'дварфов', halfling: 'полуросликов', orc: 'орков' };
+const CULT_RACE = { human: 'человек', elf: 'эльф', dwarf: 'дварф', halfling: 'полурослик', orc: 'орк' };
+// Детерминированный генератор: один и тот же город всегда получается одинаковым.
+const hashStr = (str) => { let h = 2166136261; for (const c of String(str)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
+const seeded = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+let RNG = Math.random;
+const pick = (a) => a[Math.floor(RNG() * a.length)];
+const shuffle = (a) => a.map((v) => [RNG(), v]).sort((p, q) => p[0] - q[0]).map((p) => p[1]);
 const PLANS = {
   village: { size: ['small', 'small', 'medium'], must: ['well'], pool: ['tavern', 'smithy', 'shop', 'healer', 'elder', 'farm', 'mill', 'stable', 'temple', 'alchemist'], n: [2, 4], huts: 2, houses: 0.8, walls: 0.05, river: 0.4 },
   town: { size: ['medium'], must: ['tavern', 'market', 'smithy', 'temple', 'well', 'elder'], pool: ['shop', 'healer', 'alchemist', 'stable', 'inn', 'guild', 'library', 'mill', 'barracks'], n: [3, 5], huts: 1, houses: 1, walls: 0.3, river: 0.5 },
@@ -127,15 +132,16 @@ function bname(type, culture) {
   if (culture === 'elf') { if (type === 'temple') return 'Храм Лунного света'; if (type === 'library') return 'Хранилище свитков'; if (type === 'elder') return 'Дом хранителя'; if (type === 'palace') return 'Чертог'; }
   if (culture === 'dwarf') { if (type === 'temple') return 'Храм Горнила'; if (type === 'elder') return 'Дом тана'; if (type === 'palace') return 'Каменный чертог'; if (type === 'market') return 'Торговый зал'; }
   if (culture === 'halfling' && type === 'elder') return 'Дом бургомистра';
+  if (culture === 'orc') { if (type === 'elder') return 'Шатёр вождя'; if (type === 'palace') return 'Твердыня вождя'; if (type === 'temple') return 'Капище'; if (type === 'smithy') return 'Кровавая кузня'; if (type === 'market') return 'Меновой двор'; if (type === 'library') return 'Хранилище трофеев'; }
   return BNAME[type] || 'Здание';
 }
 function autoBuildings(plan, extra, culture) {
   const out = [];
   const add = (type) => out.push({ type, name: bname(type, culture) });
   for (const t of plan.must) add(t);
-  const k = plan.n[0] + Math.floor(Math.random() * (plan.n[1] - plan.n[0] + 1));
+  const k = plan.n[0] + Math.floor(RNG() * (plan.n[1] - plan.n[0] + 1));
   for (const t of shuffle(plan.pool).slice(0, k)) add(t);
-  for (let i = 0; i < plan.huts * Math.random() * 2; i++) add('hut');
+  for (let i = 0; i < plan.huts * RNG() * 2; i++) add('hut');
   for (const b of Array.isArray(extra) ? extra : []) {
     if (!BUILD[b?.type] || b.type === 'house') continue;
     const ex = out.find((o) => o.type === b.type);
@@ -145,17 +151,22 @@ function autoBuildings(plan, extra, culture) {
 }
 const SIZES = { small: [28, 20, 6], medium: [36, 24, 12], large: [44, 30, 20] };
 function buildScene(spec) {
+  const prev = RNG;
+  RNG = seeded(hashStr(String(spec.name || '') + '|' + (spec.kind || '') + '|' + (spec.culture || '')));
+  try { return buildSceneRaw(spec); } finally { RNG = prev; }
+}
+function buildSceneRaw(spec) {
   const kind = PLANS[spec.kind] ? spec.kind : 'village';
   const plan = PLANS[kind];
   const size = SIZES[spec.size] ? spec.size : pick(plan.size);
   const culture = CULT[spec.culture] ? spec.culture : 'human';
   spec = { ...spec, kind, size, culture };
-  if (spec.walls == null) spec.walls = Math.random() < plan.walls;
-  if (spec.river == null) spec.river = Math.random() < plan.river;
-  if (spec.forest == null) spec.forest = culture === 'elf' || Math.random() < 0.35;
+  if (spec.walls == null) spec.walls = RNG() < plan.walls;
+  if (spec.river == null) spec.river = RNG() < plan.river;
+  if (spec.forest == null) spec.forest = culture === 'elf' || RNG() < 0.35;
   spec.buildings = autoBuildings(plan, spec.buildings, culture);
   const [w, h, baseHouses] = SIZES[size];
-  const nHouses = Math.max(2, Math.round(baseHouses * plan.houses * (0.8 + Math.random() * 0.4)));
+  const nHouses = Math.max(2, Math.round(baseHouses * plan.houses * (0.8 + RNG() * 0.4)));
   const tiles = Array.from({ length: h }, () => Array(w).fill('.'));
   const occ = Array.from({ length: h }, () => Array(w).fill(false));
   const cx = Math.floor(w / 2), cy = Math.floor(h / 2), m = 2;
@@ -188,7 +199,7 @@ function buildScene(spec) {
     let best = null, bc = Infinity;
     for (let y = m; y < h - m; y++) for (let x = m; x < w - m; x++) {
       if (!free(x, y, bw, bh)) continue;
-      const c = Math.hypot(x + bw / 2 - tx, y + bh / 2 - ty) + (nearRoad(x, y, bw, bh) ? 0 : 7) + Math.random() * 3;
+      const c = Math.hypot(x + bw / 2 - tx, y + bh / 2 - ty) + (nearRoad(x, y, bw, bh) ? 0 : 7) + RNG() * 3;
       if (c < bc) { bc = c; best = { x, y }; }
     }
     if (!best) return;
@@ -198,13 +209,13 @@ function buildScene(spec) {
   const list = (Array.isArray(spec.buildings) ? spec.buildings : []).slice(0, 30).filter((b) => BUILD[b?.type]);
   for (const b of list) {
     if (b.type === 'castle' || b.type === 'palace') place(b.type, b.name, cx, 4);
-    else if (b.type === 'hut') place('hut', b.name, Math.random() < 0.5 ? 4 : w - 5, cy + (Math.random() < 0.5 ? -6 : 7));
+    else if (b.type === 'hut') place('hut', b.name, RNG() < 0.5 ? 4 : w - 5, cy + (RNG() < 0.5 ? -6 : 7));
     else if (b.type === 'tower') place('tower', b.name, w - 5, 4);
-    else if (['farm', 'mill', 'stable'].includes(b.type)) place(b.type, b.name, Math.random() < 0.5 ? 5 : w - 6, h - 5);
-    else place(b.type, b.name, cx + (Math.random() - 0.5) * 8, cy + (Math.random() - 0.5) * 6);
+    else if (['farm', 'mill', 'stable'].includes(b.type)) place(b.type, b.name, RNG() < 0.5 ? 5 : w - 6, h - 5);
+    else place(b.type, b.name, cx + (RNG() - 0.5) * 8, cy + (RNG() - 0.5) * 6);
   }
   place('board', BNAME.board, cx + 3, cy - 3);
-  for (let i = 0; i < nHouses; i++) place('house', 'Дом', cx + (Math.random() - 0.5) * w * 0.7, cy + (Math.random() - 0.5) * h * 0.7);
+  for (let i = 0; i < nHouses; i++) place('house', 'Дом', cx + (RNG() - 0.5) * w * 0.7, cy + (RNG() - 0.5) * h * 0.7);
   const edge = spec.forest ? 5 : 2;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     if (tiles[y][x] !== '.' || occ[y][x]) continue;
@@ -213,10 +224,10 @@ function buildScene(spec) {
     if (near) continue;
     const d = Math.min(x, y, w - 1 - x, h - 1 - y);
     const p = (spec.forest ? 0.1 : 0.03) + (d < edge ? (spec.forest ? 0.4 : 0.1) : 0);
-    if (Math.random() < p) tiles[y][x] = 't';
+    if (RNG() < p) tiles[y][x] = 't';
   }
   return {
-    id: rid(8), culture, name: String(spec.name || 'Поселение').slice(0, 80), kind,
+    id: 's' + hashStr(String(spec.name) + kind + culture).toString(16), culture, name: String(spec.name || 'Поселение').slice(0, 80), kind,
     description: String(spec.description || '').slice(0, 1500),
     w, h, tiles: tiles.map((r) => r.join('')), buildings, spawn: { x: 2, y: cy },
   };
@@ -241,14 +252,44 @@ function freeCell(room) {
   return best || { x: 0, y: 0 };
 }
 
+const KNOWN = [
+  ['каменн', 'kamenny-grad'], ['марокко', 'kamenny-grad'], ['маунтайн', 'mountain'],
+  ['стальград', { name: 'Стальград', kind: 'capital', culture: 'human', walls: true, river: true, forest: false }],
+  ['траун', { name: 'Траун', kind: 'capital', culture: 'elf', walls: false, river: true, forest: true }],
+  ['лорнэйдар', { name: 'Лорнэйдар', kind: 'city', culture: 'elf', walls: false, river: false, forest: true }],
+  ['хоббитон', { name: 'Хоббитон', kind: 'capital', culture: 'halfling', walls: false, river: true, forest: false }],
+  ['мираж', { name: 'Хоббитон', kind: 'capital', culture: 'halfling', walls: false, river: true, forest: false }],
+  ['магор', { name: 'Магор', kind: 'capital', culture: 'orc', walls: true, river: false, forest: false }],
+];
+const normName = (n) => String(n || '').toLowerCase().replace(/ё/g, 'е').replace(/[^а-яa-z0-9 ]/g, '').trim();
+function fixedScene(p) {
+  return { id: 'f-' + p.key, culture: p.culture, name: p.name, kind: p.kind, description: p.description, w: p.w, h: p.h,
+    tiles: p.tiles.slice(), buildings: p.buildings.map((b) => ({ ...b })), spawn: { ...p.spawn }, art: p.art, walk: p.walk };
+}
+// Возвращает готовую сцену. Один и тот же город всегда рисуется одинаково.
+function resolveScene(room, spec) {
+  room.places = room.places || {};
+  const n = normName(spec.name);
+  for (const [k, v] of KNOWN) {
+    if (!n.includes(k)) continue;
+    if (typeof v === 'string') return fixedScene(FIXED_PLACES[v]);
+    spec = { ...spec, ...v }; break;
+  }
+  const saved = room.places[n];
+  if (saved) spec = { ...spec, kind: saved.kind, culture: saved.culture, buildings: saved.buildings };
+  else {
+    if (!CULT[spec.culture]) spec.culture = inferCulture(room);
+    if (!PLANS[spec.kind]) spec.kind = 'village';
+    room.places[n] = { kind: spec.kind, culture: spec.culture, buildings: Array.isArray(spec.buildings) ? spec.buildings.slice(0, 20) : [] };
+  }
+  return buildScene(spec);
+}
 function openScene(room, spec) {
   for (const t of Object.values(room.tokens)) {
     if (t.wx == null) { t.wx = t.x; t.wy = t.y; }
     if (t.type !== 'player') t.away = true;
   }
-  spec = { ...spec };
-  if (!CULT[spec.culture]) spec.culture = inferCulture(room);
-  room.scene = buildScene(spec);
+  room.scene = resolveScene(room, spec);
   for (const t of Object.values(room.tokens)) if (t.type === 'player') { t.x = -99; t.y = -99; }
   for (const t of Object.values(room.tokens)) if (t.type === 'player') Object.assign(t, freeCell(room));
   populate(room);
@@ -266,6 +307,7 @@ const PERSON = {
   elf: ['Ариэль', 'Эларион', 'Лиррэль', 'Тэйлиан', 'Силиэль', 'Фаэрон', 'Мираэль', 'Элоран'],
   dwarf: ['Торин', 'Дарин', 'Брунгильда', 'Борин', 'Хельга', 'Грундир', 'Тордис', 'Балин'],
   halfling: ['Пиппин', 'Рози', 'Мерри', 'Лобелия', 'Сэмвис', 'Нола', 'Хэмфаст', 'Присцилла'],
+  orc: ['Грош', 'Урзул', 'Мога', 'Зарга', 'Крул', 'Балаг', 'Шакра', 'Дроган'],
 };
 const ROLE = { smithy: 'кузнец', tavern: 'трактирщик', inn: 'хозяин постоялого двора', healer: 'знахарь', library: 'хранитель библиотеки', temple: 'жрец', elder: 'староста', market: 'торговец', palace: 'придворный', guild: 'глава гильдии', barracks: 'капитан стражи', shop: 'лавочник', alchemist: 'алхимик', farm: 'фермер', mill: 'мельник', stable: 'конюх', castle: 'кастелян' };
 const TALK = {
@@ -288,25 +330,29 @@ const TALK = {
   кастелян: ['Замок на осадном положении. Говорите быстро.', 'Нам нужны припасы и надёжные воины.'],
 };
 const QUEST_T = {
-  tavern: ['Крысы в погребе', 'В погребе таверны завелись гигантские крысы. Нужно избавить хозяина от напасти.', '30 зм'],
-  smithy: ['Руда для кузнеца', 'Кузнецу нужно десять кусков железной руды из заброшенной штольни.', '50 зм'],
-  healer: ['Редкие травы', 'Знахарю нужны лунные травы с опушки леса. Опасайтесь волков.', '40 зм и зелье'],
-  library: ['Пропавший свиток', 'Из библиотеки пропал древний свиток. Говорят, его видели у разбойников.', '100 зм'],
-  temple: ['Неупокоенные', 'По ночам у храма из земли встают скелеты. Нужно упокоить их.', '80 зм'],
-  farm: ['Волки у стада', 'Стая волков режет скот. Нужно найти логово.', '35 зм'],
-  elder: ['Пропавший караван', 'Караван с припасами не вернулся с тракта. Найдите его или выясните причину.', '90 зм'],
-  stable: ['Сбежавший жеребец', 'Лучший жеребец сорвался с привязи и ускакал в лес.', '25 зм'],
-  barracks: ['Разбойники на тракте', 'Шайка разбойников грабит путников. Стража не справляется.', '120 зм'],
-  palace: ['Поручение короны', 'Королевский двор ищет героев для деликатного поручения.', '200 зм'],
-  guild: ['Заказ гильдии', 'Гильдия размещает заказ на уничтожение чудовища в окрестностях.', '150 зм'],
-  market: ['Задержанный караван', 'Торговцы платят за сопровождение каравана до соседнего города.', '60 зм'],
-  mill: ['Треснувший жернов', 'Мельнику нужен новый жернов из каменоломни.', '45 зм'],
-  alchemist: ['Ингредиенты для зелий', 'Алхимику нужны сердца болотных троллей и светящиеся грибы.', '70 зм'],
-  any: ['Слухи о нечисти', 'Местные видят странные огни в лесу. Разузнайте, что там.', '40 зм'],
+  tavern: ['Логово контрабандистов', 'Под таверной нашли ход в подземелье. Там засела банда контрабандистов с наёмным магом, и они готовят нападение на город.'],
+  smithy: ['Мифриловая жила', 'В заброшенной штольне нашли жилу мифрила, но её заняли огры-рудокопы под началом вожака. Нужно очистить шахту и вернуть руду.'],
+  healer: ['Цветок бессмертия', 'Знахарю нужен редкий цветок, растущий только в логове старой виверны. Без него умрёт знатный пациент.'],
+  library: ['Запретный фолиант', 'Из закрытого хранилища выкрали древний фолиант. След ведёт к культу некромантов в катакомбах за городом.'],
+  temple: ['Проклятое кладбище', 'Каждую ночь на старом кладбище встаёт нежить во главе с вампиром-лордом. Храм не справляется.'],
+  farm: ['Тварь из чащи', 'Огромный зверь, закованный в тёмную магию, разоряет фермы. Люди боятся выходить за околицу.'],
+  elder: ['Пропавшая экспедиция', 'Отряд разведчиков не вернулся из ущелья. Их нужно найти или узнать, что с ними случилось.'],
+  stable: ['Верный жеребец короля', 'Королевского жеребца угнали разбойники. Найдите их лагерь в горах и верните коня.'],
+  barracks: ['Лагерь налётчиков', 'Крупная шайка с командиром-наёмником перехватывает караваны. Стража просит героев уничтожить их лагерь.'],
+  palace: ['Тайное поручение двора', 'Двор просит героев деликатно устранить заговор: ищите предателя, но так, чтобы он не успел сбежать.'],
+  guild: ['Контракт на чудовище', 'Гильдия нанимает героев убить древнее чудовище, поселившееся в руинах. Погибли уже две группы.'],
+  market: ['Сопровождение каравана', 'Купцы платят за охрану дорогого груза через земли, где орудуют разбойники и чудовища.'],
+  mill: ['Проклятая мельница', 'На заброшенной мельнице по ночам горит свет. Там поселился дух и убивает всех, кто подходит близко.'],
+  alchemist: ['Сердце тролля', 'Алхимик готовит редкий эликсир и ищет героев, способных добыть сердце речного тролля и светящиеся грибы пещер.'],
+  any: ['Огни в старой башне', 'В заброшенной башне вспыхивают странные огни, из неё слышны голоса. Выясните, что там происходит, и избавьтесь от угрозы.'],
 };
-function makeQuest(room, type, giver, onBoard, place) {
+const REWARD = { village: [500, 1500], town: [1000, 3000], port: [1000, 3000], fort: [1500, 3500], city: [2000, 5000], capital: [3000, 8000] };
+function makeQuest(room, type, giver, onBoard, place, kind) {
   const t = QUEST_T[type] || QUEST_T.any;
-  const q = { id: 'q' + rid(8), title: t[0], description: t[1], reward: t[2], giver: giver || '', place: place || '', onBoard: !!onBoard, status: 'open', takenBy: [] };
+  const [lo, hi] = REWARD[kind] || REWARD.village;
+  const gold = Math.round((lo + RNG() * (hi - lo)) / 100) * 100;
+  const lvl = Math.min(15, Math.max(4, 3 + Math.round(gold / 700)));
+  const q = { id: 'q' + rid(8), title: t[0], description: t[1] + ' Рекомендуемый уровень отряда: ' + lvl + '.', reward: gold + ' зм', giver: giver || '', place: place || '', onBoard: !!onBoard, status: 'open', takenBy: [] };
   room.quests.push(q);
   return q;
 }
@@ -319,6 +365,11 @@ function walkableCell(room, x, y) {
   return !Object.values(room.tokens).some((t) => !t.away && t.x === x && t.y === y);
 }
 function populate(room) {
+  const prev = RNG;
+  RNG = seeded(hashStr('pop|' + room.scene.name));
+  try { populateRaw(room); } finally { RNG = prev; }
+}
+function populateRaw(room) {
   const sc = room.scene, cul = sc.culture;
   const cnt = { village: 3, town: 4, port: 4, fort: 3, city: 6, capital: 7 }[sc.kind] || 3;
   const cand = shuffle(sc.buildings.filter((b) => ROLE[b.type])).slice(0, cnt);
@@ -330,11 +381,15 @@ function populate(room) {
     const role = ROLE[b.type];
     const t = addToken(room, { name: pick(PERSON[cul]), type: 'npc', ...pos });
     t.race = CULT_RACE[cul]; t.role = role; t.talk = { text: pick(TALK[role] || ['Добрый день, путники.']) };
-    if (Math.random() < 0.6) { const q = makeQuest(room, b.type, t.name, false, sc.name); t.questId = q.id; }
+    if (RNG() < 0.6) {
+      const ex = room.quests.find((q) => q.giver === t.name && q.place === sc.name && !q.onBoard);
+      if (ex) { if (ex.status !== 'done') t.questId = ex.id; }
+      else { const q = makeQuest(room, b.type, t.name, false, sc.name, sc.kind); t.questId = q.id; }
+    }
   }
   const types = shuffle(sc.buildings.map((b) => b.type).filter((x) => QUEST_T[x]));
   const nb = { village: 2, town: 3, port: 3, fort: 2, city: 4, capital: 5 }[sc.kind] || 2;
-  for (const type of [...new Set(types)].slice(0, nb)) makeQuest(room, type, 'Доска объявлений', true, sc.name);
+  if (!room.quests.some((q) => q.onBoard && q.place === sc.name)) for (const type of [...new Set(types)].slice(0, nb)) makeQuest(room, type, 'Доска объявлений', true, sc.name, sc.kind);
 }
 function closeScene(room) {
   room.scene = null;
@@ -437,10 +492,10 @@ const TOOLS = [
     input_schema: obj({ title: { type: 'string' }, description: { type: 'string' },
       enemies: { type: 'array', items: obj({ name: { type: 'string' }, hp: { type: 'integer' },
         x: { type: 'integer' }, y: { type: 'integer' } }, ['name', 'hp', 'x', 'y']) } }, ['title', 'description', 'enemies']) },
-  { name: 'open_location', description: 'Открыть вид сверху на поселение. Сервер сам выберет и нарисует здания, жителей и доску объявлений по типу поселения: деревня маленькая и скромная, город и столица большие и богатые. НЕ перечисляй здания, если мастер не просил конкретные. Культура определяется по месту на карте, указывай её только если мастер назвал.',
+  { name: 'open_location', description: 'Открыть вид сверху на поселение. Сервер сам выберет и нарисует здания, жителей и доску объявлений по типу поселения: деревня маленькая и скромная, город и столица большие и богатые. НЕ перечисляй здания, если мастер не просил конкретные. Культура определяется по месту на карте, указывай её только если мастер назвал. Известные города рисуются всегда одинаково: Каменный Град (столица дварфов, королевство Марокко), Деревушка Маунтайн (дварфы), Стальград (столица людей, Аард), Траун и Лорнэйдар (эльфы), Хоббитон (столица полуросликов, Мираж), Магор (столица орков). Любой город, открытый один раз, запоминается и потом выглядит так же.',
     input_schema: obj({
       name: { type: 'string' }, kind: { type: 'string', enum: ['village', 'town', 'city', 'capital', 'fort', 'port'] },
-      culture: { type: 'string', enum: ['human', 'elf', 'dwarf', 'halfling'] }, description: { type: 'string' },
+      culture: { type: 'string', enum: ['human', 'elf', 'dwarf', 'halfling', 'orc'] }, description: { type: 'string' },
       walls: { type: 'boolean' }, river: { type: 'boolean' }, forest: { type: 'boolean' },
       buildings: { type: 'array', items: obj({ type: { type: 'string', enum: Object.keys(BUILD).filter((k) => k !== 'house' && k !== 'board') }, name: { type: 'string' } }, ['type', 'name']) },
     }, ['name', 'kind', 'description']) },
@@ -465,7 +520,7 @@ async function askClaude(room, text) {
   };
   const system = 'Ты помощник мастера настольной игры в стиле D&D. Отвечай по-русски, кратко и атмосферно. ' +
     'Изменения на карте и в мире делай ТОЛЬКО через инструменты, координаты в пределах карты (с нуля). ' +
-    'Когда мастер просит открыть поселение, вызови open_location: здания, жителей и доску объявлений сервер создаст сам по типу поселения (деревня скромная, город и столица большие). Новые задания для доски добавляй через add_quest, реплики жителей через npc_say. ' +
+    'Когда мастер просит открыть поселение, вызови open_location: здания, жителей и доску объявлений сервер создаст сам по типу поселения (деревня скромная, город и столица большие). Награды за задания большие (1000 до 8000 золотых) и сложность высокая; уточни уровень отряда, если он не известен. Новые задания для доски добавляй через add_quest, реплики жителей через npc_say. ' +
     'Не придумывай токены, которых нет в списке, для move_token и set_hp. ' +
     (room.scene ? sceneNote(room) : '') +
     (!room.scene && room.map.bg === '/world.jpg'

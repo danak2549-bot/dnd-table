@@ -54,13 +54,16 @@ export function drawMap(canvas, state, selId, view, now = performance.now()) {
   g.fillStyle = '#101117'; g.fillRect(0, 0, W, H);
   g.save();
   g.translate(view.x, view.y); g.scale(view.s, view.s);
-  if (state.scene) {
+  if (state.scene && state.scene.art) {
+    const ai = bgImage(state.scene.art, () => drawMap(canvas, state, selId, view, now));
+    if (ai) g.drawImage(ai, 0, 0, W, H); else { g.fillStyle = '#23252c'; g.fillRect(0, 0, W, H); }
+  } else if (state.scene) {
     const sc = sceneCanvas(state.scene);
     if (sc) g.drawImage(sc, 0, 0, W, H); else { g.fillStyle = '#7ea85c'; g.fillRect(0, 0, W, H); }
   }
   const img = state.scene ? null : bgImage(state.map.bg, () => drawMap(canvas, state, selId, view));
   if (img) g.drawImage(img, 0, 0, W, H);
-  g.strokeStyle = state.scene ? 'rgba(0,0,0,.1)' : 'rgba(255,255,255,.16)'; g.lineWidth = 1 / view.s;
+  g.strokeStyle = state.scene && state.scene.art ? 'rgba(255,255,255,.07)' : state.scene ? 'rgba(0,0,0,.1)' : 'rgba(255,255,255,.16)'; g.lineWidth = 1 / view.s;
   for (let i = 0; i <= w; i++) { g.beginPath(); g.moveTo(i * cell, 0); g.lineTo(i * cell, H); g.stroke(); }
   for (let j = 0; j <= h; j++) { g.beginPath(); g.moveTo(0, j * cell); g.lineTo(W, j * cell); g.stroke(); }
   if (state.scene) drawLabels(g, state.scene, cell, view);

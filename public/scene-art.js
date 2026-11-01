@@ -44,6 +44,7 @@ const THEMES = {
   human: { ground: '#7ea85c', road: '#cdb17c', roofs: ['#b5523a', '#8a5a3a', '#5f6b7a', '#c0763a', '#7a8f4e'], walls: ['#e6d8b8', '#d9c7a0', '#cdbb99', '#e8dfc9'], accent: null },
   elf: { ground: '#78b56e', road: '#e2dbbc', roofs: ['#4f9a7a', '#6fb08a', '#5f8ab0', '#8a6ab0'], walls: ['#f2ecdc', '#e6f0e2', '#efe6f4'], accent: '#6fb08a', curve: true, glow: true },
   dwarf: { ground: '#8e8c7a', road: '#9c9ca8', roofs: ['#4a4f5a', '#5a4a4a', '#3f4a5a'], walls: ['#8e8e98', '#7e7e88', '#9a9aa4'], accent: '#4a4f5a', stone: true },
+  orc: { ground: '#a07c54', road: '#8a6a48', roofs: ['#6a3a2a', '#8a4a2a', '#4a2a1a', '#7a2a22'], walls: ['#8a6a4a', '#7a5a3a', '#9a7a5a'], accent: '#7a2a22', rocks: true, palisade: true },
   halfling: { ground: '#8cc460', road: '#d2b078', roofs: ['#d8b868', '#c9a75a', '#b89048'], walls: ['#efe0bc', '#e8d4a8'], accent: '#c9a75a', burrow: true },
 };
 let TH = THEMES.human;
@@ -224,9 +225,9 @@ function drawBuilding(g, b, px, seed) {
     case 'palace': {
       sh();
       const hall = { x: b.x + 2, y: b.y + 0.2, w: b.w - 4, h: b.h * 0.72 };
-      gable(g, { x: b.x + 0.4, y: b.y + 1.0, w: 2.2, h: b.h * 0.6 }, px, { wall: '#f0e8d8', roof: '#3f6fb8' }, {});
-      gable(g, { x: b.x + b.w - 2.6, y: b.y + 1.0, w: 2.2, h: b.h * 0.6 }, px, { wall: '#f0e8d8', roof: '#3f6fb8' }, {});
-      gable(g, hall, px, { wall: '#f6efe0', roof: '#2f5fa8' }, { winBlue: true });
+      gable(g, { x: b.x + 0.4, y: b.y + 1.0, w: 2.2, h: b.h * 0.6 }, px, { wall: '#f0e8d8', roof: mix('#3f6fb8', TH.accent || '#3f6fb8', 0.6) }, {});
+      gable(g, { x: b.x + b.w - 2.6, y: b.y + 1.0, w: 2.2, h: b.h * 0.6 }, px, { wall: '#f0e8d8', roof: mix('#3f6fb8', TH.accent || '#3f6fb8', 0.6) }, {});
+      gable(g, hall, px, { wall: '#f6efe0', roof: mix('#2f5fa8', TH.accent || '#2f5fa8', 0.6) }, { winBlue: true });
       const dcx = (hall.x + hall.w / 2) * px, dcy = (hall.y + hall.h * 0.3) * px;
       circle(g, dcx, dcy, px * 0.8, radial(g, dcx, dcy, px * 0.8, '#ffe08a', '#b8860b'));
       g.strokeStyle = 'rgba(90,60,0,.5)'; g.lineWidth = px * 0.04;
@@ -265,7 +266,7 @@ function drawBuilding(g, b, px, seed) {
       if (b.type === 'temple') {
         const cx = x + w / 2, cy = y + h * 0.3;
         g.fillStyle = '#c9ccd2'; rr(g, cx - px * 0.55, cy - px * 0.55, px * 1.1, px * 1.1, px * 0.1); g.fill();
-        g.fillStyle = '#3f5fa8'; g.beginPath(); g.moveTo(cx - px * 0.6, cy - px * 0.5); g.lineTo(cx + px * 0.6, cy - px * 0.5); g.lineTo(cx, cy - px * 1.15); g.closePath(); g.fill();
+        g.fillStyle = mix('#3f5fa8', TH.accent || '#3f5fa8', 0.6); g.beginPath(); g.moveTo(cx - px * 0.6, cy - px * 0.5); g.lineTo(cx + px * 0.6, cy - px * 0.5); g.lineTo(cx, cy - px * 1.15); g.closePath(); g.fill();
         g.strokeStyle = '#e0b040'; g.lineWidth = px * 0.07; g.beginPath(); g.moveTo(cx, cy - px * 1.15); g.lineTo(cx, cy - px * 1.5); g.moveTo(cx - px * 0.14, cy - px * 1.34); g.lineTo(cx + px * 0.14, cy - px * 1.34); g.stroke();
       } else if (b.type === 'mill') {
         const cx = x + w / 2, cy = y + h * 0.3;
@@ -361,6 +362,14 @@ export function renderScene(scene, px) {
     if (T(x, y) !== 'W') continue;
     const X = x * px, Y = y * px;
     g.fillStyle = 'rgba(20,30,15,.28)'; g.fillRect(X + px * 0.12, Y + px * 0.16, px, px);
+    if (TH.palisade) {
+      for (let i = 0; i < 4; i++) {
+        const sx = X + (i + 0.5) * px / 4;
+        g.fillStyle = lg(g, sx - px * 0.1, Y, sx + px * 0.1, Y, '#9a7448', '#5a3a1e'); g.fillRect(sx - px * 0.11, Y + px * 0.05, px * 0.22, px * 0.95);
+        g.fillStyle = '#6a4a28'; g.beginPath(); g.moveTo(sx - px * 0.11, Y + px * 0.05); g.lineTo(sx, Y - px * 0.08); g.lineTo(sx + px * 0.11, Y + px * 0.05); g.closePath(); g.fill();
+      }
+      continue;
+    }
     g.fillStyle = lg(g, X, Y, X + px, Y + px, '#a2a2ac', '#767680'); g.fillRect(X, Y, px + 0.5, px + 0.5);
     g.strokeStyle = 'rgba(40,40,50,.45)'; g.lineWidth = px * 0.04;
     g.beginPath(); g.moveTo(X, Y + px / 2); g.lineTo(X + px, Y + px / 2); g.moveTo(X + px * 0.3, Y); g.lineTo(X + px * 0.3, Y + px / 2); g.moveTo(X + px * 0.7, Y + px / 2); g.lineTo(X + px * 0.7, Y + px); g.stroke();
@@ -377,7 +386,7 @@ export function renderScene(scene, px) {
     const cx = (x + 0.5 + (rnd(seed, x, y, 100) - 0.5) * 0.4) * px, cy = (y + 0.5 + (rnd(seed, x, y, 101) - 0.5) * 0.4) * px;
     const r = px * (0.42 + rnd(seed, x, y, 102) * 0.28);
     g.fillStyle = 'rgba(20,35,15,.3)'; g.beginPath(); g.ellipse(cx + r * 0.35, cy + r * 0.5, r * 0.95, r * 0.6, 0, 0, 7); g.fill();
-    if (TH.stone) {
+    if (TH.stone || TH.rocks) {
       for (const [ox, oy, rs] of [[-0.3, 0.1, 0.5], [0.25, 0.2, 0.42], [0, -0.15, 0.55]]) {
         g.fillStyle = radial(g, cx + ox * r * 1.4, cy + oy * r * 1.4, r * rs, '#b4b4bc', '#6a6a74'); g.beginPath(); g.ellipse(cx + ox * r * 1.4, cy + oy * r * 1.4, r * rs, r * rs * 0.8, 0, 0, 7); g.fill();
       }
