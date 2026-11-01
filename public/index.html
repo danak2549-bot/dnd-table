@@ -26,6 +26,7 @@
     <div><strong id="room-code"></strong> <span id="role" class="dim"></span></div>
     <div id="loc" class="loc"></div>
   </header>
+  <div id="qbanner" class="qbanner" hidden></div>
   <div class="mapwrap">
     <canvas id="map"></canvas>
     <div class="zoom">
@@ -37,6 +38,7 @@
   </div>
   <nav class="tabs" id="tabs">
     <button data-tab="sheet" class="on" type="button">Лист</button>
+    <button data-tab="quests" type="button">Задания</button>
     <button data-tab="inv" type="button">Вещи</button>
     <button data-tab="log" type="button">События</button>
     <button data-tab="master" type="button" id="tab-master" hidden>Мастер</button>
@@ -44,12 +46,14 @@
   <section id="p-sheet" class="panel">
     <div id="avatar" class="avatar" hidden><div class="av-svg"></div><ul class="av-list"></ul></div>
     <div id="profile" class="profile" hidden>
-      <input id="pr-race" class="sheet-input" placeholder="Раса" maxlength="40">
+      <input id="pr-race" class="sheet-input" placeholder="Раса" maxlength="40" list="races">
+      <datalist id="races"></datalist>
       <input id="pr-class" class="sheet-input" placeholder="Класс" maxlength="40">
       <input id="pr-level" class="sheet-input sheet-num" type="number" min="1" max="30" placeholder="Ур.">
     </div>
     <div id="sheet"></div>
   </section>
+  <section id="p-quests" class="panel" hidden><div id="quests"></div></section>
   <section id="p-inv" class="panel" hidden><div id="inv"></div></section>
   <section id="p-log" class="panel" hidden>
     <div class="dice">
@@ -85,6 +89,15 @@
     </details>
   </section>
 </main>
+<div id="dialog" class="dialog" hidden>
+  <div class="dlg-card">
+    <div class="dlg-head"><strong id="dlg-name"></strong> <span id="dlg-sub" class="dim"></span></div>
+    <div id="dlg-text" class="dlg-text"></div>
+    <div id="dlg-quest" class="q-card" hidden></div>
+    <div id="dlg-say" class="row" hidden><input id="dlg-say-in" class="sheet-input" placeholder="Что скажет НПС" maxlength="200"><button id="dlg-say-go" class="sheet-btn" type="button">Сказать</button></div>
+    <div class="row"><button id="dlg-take" class="sheet-btn" type="button" hidden>Принять задание</button><button id="dlg-close" class="sheet-btn alt" type="button">Закрыть</button></div>
+  </div>
+</div>
 <script src="/socket.io/socket.io.js"></script>
 <script type="module" src="app.js"></script>
 </body>

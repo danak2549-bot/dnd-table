@@ -35,6 +35,19 @@ const ST = {
   inn: { wall: '#e3cfa5', roof: '#7a4a8a', icon: '🛏️' }, well: { wall: '#9aa3ad', roof: '#3f7fbf', icon: '' },
   house: { wall: '#e6d8b8', roof: '#b5523a', icon: '' },
 };
+const mix = (h1, h2, k) => {
+  const a = parseInt(h1.slice(1), 16), b = parseInt(h2.slice(1), 16);
+  const f = (sh) => Math.round(((a >> sh) & 255) * (1 - k) + ((b >> sh) & 255) * k);
+  return '#' + [16, 8, 0].map((sh) => f(sh).toString(16).padStart(2, '0')).join('');
+};
+const THEMES = {
+  human: { ground: '#7ea85c', road: '#cdb17c', roofs: ['#b5523a', '#8a5a3a', '#5f6b7a', '#c0763a', '#7a8f4e'], walls: ['#e6d8b8', '#d9c7a0', '#cdbb99', '#e8dfc9'], accent: null },
+  elf: { ground: '#78b56e', road: '#e2dbbc', roofs: ['#4f9a7a', '#6fb08a', '#5f8ab0', '#8a6ab0'], walls: ['#f2ecdc', '#e6f0e2', '#efe6f4'], accent: '#6fb08a', curve: true, glow: true },
+  dwarf: { ground: '#8e8c7a', road: '#9c9ca8', roofs: ['#4a4f5a', '#5a4a4a', '#3f4a5a'], walls: ['#8e8e98', '#7e7e88', '#9a9aa4'], accent: '#4a4f5a', stone: true },
+  halfling: { ground: '#8cc460', road: '#d2b078', roofs: ['#d8b868', '#c9a75a', '#b89048'], walls: ['#efe0bc', '#e8d4a8'], accent: '#c9a75a', burrow: true },
+};
+let TH = THEMES.human;
+ST.board = { wall: '#8a5a2e', roof: '#6a3a22', icon: '' };
 const HOUSE_ROOFS = ['#b5523a', '#8a5a3a', '#5f6b7a', '#c0763a', '#7a8f4e'];
 const HOUSE_WALLS = ['#e6d8b8', '#d9c7a0', '#cdbb99', '#e8dfc9'];
 const CHIMNEY = new Set(['smithy', 'tavern', 'inn', 'house', 'elder', 'healer', 'alchemist', 'shop', 'library']);
@@ -50,6 +63,10 @@ function gable(g, b, px, st, opt = {}) {
   g.fillStyle = lg(g, x, wy, x, y + h, st.wall, shade(st.wall, -0.28));
   rr(g, x + p, wy, w - 2 * p, y + h - wy - p, px * 0.08); g.fill();
   g.strokeStyle = 'rgba(60,40,20,.55)'; g.lineWidth = px * 0.05; g.stroke();
+  if (TH.stone) {
+    g.strokeStyle = 'rgba(30,30,40,.35)'; g.lineWidth = px * 0.03;
+    for (let yy = wy + px * 0.3, r = 0; yy < y + h - p; yy += px * 0.3, r++) { g.beginPath(); g.moveTo(x + p, yy); g.lineTo(x + w - p, yy); g.stroke(); for (let xx = x + p + (r % 2) * px * 0.35; xx < x + w - p; xx += px * 0.7) { g.beginPath(); g.moveTo(xx, yy); g.lineTo(xx, yy + px * 0.3); g.stroke(); } }
+  }
   const winCol = opt.glow ? '#ffe08a' : (opt.winBlue ? '#a8cde8' : '#b9d6e6');
   const fr = b.w >= 5 ? [0.18, 0.34, 0.66, 0.82] : [0.2, 0.8];
   for (const f of fr) {
@@ -63,7 +80,10 @@ function gable(g, b, px, st, opt = {}) {
   circle(g, x + w / 2 + dw * 0.25, y + h - p - dh * 0.4, px * 0.04, '#e0b040');
   // крыша
   const top = y + p, bot = y + h * 0.58, rx = x - px * 0.1, rw = w + px * 0.2;
-  g.beginPath(); g.moveTo(rx, bot); g.lineTo(rx + rw, bot); g.lineTo(x + w * 0.92, top); g.lineTo(x + w * 0.08, top); g.closePath();
+  g.beginPath(); g.moveTo(rx, bot);
+  if (TH.curve) { g.quadraticCurveTo(x + w * 0.04, bot - (bot - top) * 0.55, x + w * 0.08, top); g.lineTo(x + w * 0.92, top); g.quadraticCurveTo(x + w * 0.96, bot - (bot - top) * 0.55, rx + rw, bot); }
+  else { g.lineTo(rx + rw, bot); g.lineTo(x + w * 0.92, top); g.lineTo(x + w * 0.08, top); }
+  g.closePath();
   g.fillStyle = lg(g, 0, top, 0, bot, shade(st.roof, 0.18), shade(st.roof, -0.18)); g.fill();
   g.save(); g.clip();
   g.strokeStyle = 'rgba(0,0,0,.2)'; g.lineWidth = px * 0.03;
@@ -117,11 +137,47 @@ function stall(g, x, y, px, c1, c2) {
   g.strokeStyle = 'rgba(0,0,0,.4)'; g.lineWidth = px * 0.04; g.strokeRect(x, y + px * 0.04, px * 1.2, px * 0.5);
 }
 
+function burrow(g, b, px) {
+  const x = b.x * px, y = b.y * px, w = b.w * px, h = b.h * px, cx = x + w / 2;
+  g.fillStyle = 'rgba(20,30,15,.3)'; g.beginPath(); g.ellipse(cx + px * 0.2, y + h * 0.62, w * 0.52, h * 0.46, 0, 0, 7); g.fill();
+  const k = g.createRadialGradient(cx - w * 0.15, y + h * 0.25, px * 0.2, cx, y + h * 0.5, w * 0.55);
+  k.addColorStop(0, '#9edb62'); k.addColorStop(1, '#4f8f35');
+  g.fillStyle = k; g.beginPath(); g.ellipse(cx, y + h * 0.56, w * 0.5, h * 0.46, 0, 0, 7); g.fill();
+  g.strokeStyle = 'rgba(30,70,20,.6)'; g.lineWidth = px * 0.05; g.stroke();
+  for (let i = 0; i < 7; i++) circle(g, x + w * (0.2 + ((i * 37) % 60) / 100), y + h * (0.22 + ((i * 53) % 30) / 100), px * 0.05, ['#fff', '#f4e04a', '#f08ac0'][i % 3]);
+  const dy = y + h * 0.66, dr = Math.min(px * 0.46, h * 0.28);
+  circle(g, cx, dy, dr + px * 0.07, '#e0b050'); circle(g, cx, dy, dr, '#7a4a22');
+  g.strokeStyle = 'rgba(40,20,5,.5)'; g.lineWidth = px * 0.03; g.beginPath(); g.moveTo(cx, dy - dr); g.lineTo(cx, dy + dr); g.stroke();
+  circle(g, cx + dr * 0.45, dy, px * 0.05, '#f0d060');
+  for (const f of [0.22, 0.78]) { circle(g, x + w * f, dy - px * 0.1, px * 0.17, '#e0b050'); circle(g, x + w * f, dy - px * 0.1, px * 0.12, '#ffe08a'); }
+  g.fillStyle = '#8a8078'; g.fillRect(cx + w * 0.22, y + h * 0.12, px * 0.22, px * 0.34); smoke(g, cx + w * 0.22 + px * 0.11, y + h * 0.1, px);
+  for (let i = 0; i < 3; i++) circle(g, x + w * (0.12 + i * 0.1), y + h * 0.95, px * 0.14, ['#e8842a', '#8ac04a', '#d9c84a'][i]);
+}
+function board(g, b, px) {
+  const x = b.x * px, y = b.y * px, w = b.w * px, h = b.h * px;
+  g.fillStyle = 'rgba(20,30,15,.3)'; rr(g, x + px * 0.15, y + px * 0.2, w - px * 0.1, h * 0.8, px * 0.1); g.fill();
+  g.fillStyle = '#5a3a1e'; g.fillRect(x + w * 0.12, y + h * 0.35, px * 0.14, h * 0.62); g.fillRect(x + w * 0.88 - px * 0.14, y + h * 0.35, px * 0.14, h * 0.62);
+  g.fillStyle = lg(g, x, y, x, y + h, '#a8763a', '#7a4f26'); rr(g, x + px * 0.05, y + px * 0.08, w - px * 0.1, h * 0.7, px * 0.08); g.fill();
+  g.strokeStyle = '#4a2f16'; g.lineWidth = px * 0.06; g.stroke();
+  g.fillStyle = '#6a3a22'; rr(g, x - px * 0.02, y - px * 0.02, w + px * 0.04, px * 0.16, px * 0.05); g.fill();
+  const n = Math.max(3, Math.round(b.w * 2));
+  for (let i = 0; i < n; i++) {
+    const nx = x + px * 0.18 + ((w - px * 0.5) * i) / n, ny = y + px * 0.2 + (i % 2) * px * 0.2;
+    g.save(); g.translate(nx + px * 0.14, ny + px * 0.14); g.rotate((i % 3 - 1) * 0.12);
+    g.fillStyle = i % 3 === 0 ? '#f6ecd0' : '#fdf8e8'; g.fillRect(-px * 0.14, -px * 0.14, px * 0.28, px * 0.32);
+    g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = px * 0.015; g.strokeRect(-px * 0.14, -px * 0.14, px * 0.28, px * 0.32);
+    g.strokeStyle = '#8a7a5a'; g.lineWidth = px * 0.02; for (let k = 0; k < 3; k++) { g.beginPath(); g.moveTo(-px * 0.09, -px * 0.07 + k * px * 0.07); g.lineTo(px * 0.09, -px * 0.07 + k * px * 0.07); g.stroke(); }
+    circle(g, 0, -px * 0.12, px * 0.03, '#c0392b'); g.restore();
+  }
+}
+
 function drawBuilding(g, b, px, seed) {
-  const st = ST[b.type] || ST.house;
+  const st = { ...(ST[b.type] || ST.house) };
+  if (TH.accent && b.type !== 'house') { st.roof = mix(st.roof, TH.accent, TH.stone ? 0.55 : 0.4); st.wall = mix(st.wall, TH.walls[0], TH.stone ? 0.6 : 0.4); }
   const x = b.x * px, y = b.y * px, w = b.w * px, h = b.h * px;
   const sh = () => { g.fillStyle = 'rgba(20,30,15,.32)'; rr(g, x + px * 0.2, y + px * 0.26, w, h, px * 0.2); g.fill(); };
   switch (b.type) {
+    case 'board': board(g, b, px); break;
     case 'well': {
       const cx = x + w / 2, cy = y + h / 2;
       circle(g, cx + px * 0.1, cy + px * 0.14, px * 0.46, 'rgba(20,30,15,.3)');
@@ -198,12 +254,13 @@ function drawBuilding(g, b, px, seed) {
       const o = {};
       if (b.type === 'house') {
         const r1 = rnd(seed, b.x, b.y, 1), r2 = rnd(seed, b.x, b.y, 2);
-        st.roof = HOUSE_ROOFS[Math.floor(r1 * HOUSE_ROOFS.length)]; st.wall = HOUSE_WALLS[Math.floor(r2 * HOUSE_WALLS.length)];
+        st.roof = TH.roofs[Math.floor(r1 * TH.roofs.length)]; st.wall = TH.walls[Math.floor(r2 * TH.walls.length)];
         o.chimney = r1 > 0.35;
-      } else o.chimney = CHIMNEY.has(b.type);
+      } else o.chimney = CHIMNEY.has(b.type) || !!TH.stone;
       if (b.type === 'tavern' || b.type === 'inn') o.glow = true;
       if (b.type === 'smithy') o.fire = true;
       if (b.type === 'library' || b.type === 'temple') o.winBlue = true;
+      if (TH.burrow && (b.type === 'house' || b.type === 'elder')) { burrow(g, b, px); if (b.type !== 'house') plaque(g, b, px, st.icon, 0.3); break; }
       gable(g, b, px, st, o);
       if (b.type === 'temple') {
         const cx = x + w / 2, cy = y + h * 0.3;
@@ -245,9 +302,10 @@ export function renderScene(scene, px) {
   const c = document.createElement('canvas');
   c.width = Math.round(w * px); c.height = Math.round(h * px);
   const g = c.getContext('2d');
+  TH = THEMES[scene.culture] || THEMES.human;
   const seed = hs(scene.id || scene.name), T = (x, y) => scene.tiles[y]?.[x];
   // земля: мягкие пятна
-  g.fillStyle = '#7ea85c'; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = TH.ground; g.fillRect(0, 0, c.width, c.height);
   const nb = Math.round(w * h * 0.5);
   for (let i = 0; i < nb; i++) {
     const bx = rnd(seed, i, 1) * c.width, by = rnd(seed, i, 2) * c.height, br = (2 + rnd(seed, i, 3) * 4) * px;
@@ -281,7 +339,7 @@ export function renderScene(scene, px) {
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const t = T(x, y);
     if (t === 'r') {
-      g.fillStyle = '#cdb17c'; g.fillRect(x * px, y * px, px + 0.5, px + 0.5);
+      g.fillStyle = TH.road; g.fillRect(x * px, y * px, px + 0.5, px + 0.5);
       for (const [dx, dy, ax, ay, wd, ht] of [[0, -1, 0, 0, 1, 0.1], [0, 1, 0, 0.9, 1, 0.1], [-1, 0, 0, 0, 0.1, 1], [1, 0, 0.9, 0, 0.1, 1]]) {
         const n = T(x + dx, y + dy);
         if (n && !isRoad(n)) { g.fillStyle = 'rgba(120,90,50,.45)'; g.fillRect((x + ax) * px, (y + ay) * px, wd * px, ht * px); }
@@ -319,6 +377,12 @@ export function renderScene(scene, px) {
     const cx = (x + 0.5 + (rnd(seed, x, y, 100) - 0.5) * 0.4) * px, cy = (y + 0.5 + (rnd(seed, x, y, 101) - 0.5) * 0.4) * px;
     const r = px * (0.42 + rnd(seed, x, y, 102) * 0.28);
     g.fillStyle = 'rgba(20,35,15,.3)'; g.beginPath(); g.ellipse(cx + r * 0.35, cy + r * 0.5, r * 0.95, r * 0.6, 0, 0, 7); g.fill();
+    if (TH.stone) {
+      for (const [ox, oy, rs] of [[-0.3, 0.1, 0.5], [0.25, 0.2, 0.42], [0, -0.15, 0.55]]) {
+        g.fillStyle = radial(g, cx + ox * r * 1.4, cy + oy * r * 1.4, r * rs, '#b4b4bc', '#6a6a74'); g.beginPath(); g.ellipse(cx + ox * r * 1.4, cy + oy * r * 1.4, r * rs, r * rs * 0.8, 0, 0, 7); g.fill();
+      }
+      continue;
+    }
     if (rnd(seed, x, y, 103) < 0.35) {
       for (let i = 0; i < 3; i++) {
         const yy = cy + r * 0.45 - i * r * 0.5, ww = r * (1.0 - i * 0.28);
@@ -332,9 +396,14 @@ export function renderScene(scene, px) {
       circle(g, cx, cy - r * 0.25, r * 0.7, radial(g, cx, cy - r * 0.3, r * 0.7, '#6cb85a', '#33783a'));
     }
   }
+  if (TH.glow) for (let i = 0; i < w * h * 0.08; i++) {
+    const mx = rnd(seed, i, 200) * c.width, my = rnd(seed, i, 201) * c.height, k = g.createRadialGradient(mx, my, 0, mx, my, px * 0.3);
+    k.addColorStop(0, 'rgba(210,255,240,.8)'); k.addColorStop(1, 'rgba(210,255,240,0)'); g.fillStyle = k; g.fillRect(mx - px * 0.3, my - px * 0.3, px * 0.6, px * 0.6);
+  }
+  if (TH.burrow) for (const b of scene.buildings) if (b.type === 'house') for (let i = 0; i < 3; i++) circle(g, (b.x + b.w + 0.2 + i * 0.25) * px, (b.y + b.h - 0.2 - (i % 2) * 0.2) * px, px * 0.13, ['#8ac04a', '#e8842a', '#c0e06a'][i]);
   // лёгкая виньетка
   const vg = g.createRadialGradient(c.width / 2, c.height / 2, Math.min(c.width, c.height) * 0.45, c.width / 2, c.height / 2, Math.max(c.width, c.height) * 0.75);
-  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(10,20,10,.28)');
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(10,20,10,.16)');
   g.fillStyle = vg; g.fillRect(0, 0, c.width, c.height);
   return c;
 }

@@ -20,7 +20,7 @@ const io = new Server(server);
 
 // ---------- хранилище ----------
 const rooms = new Map();
-try { for (const r of JSON.parse(fs.readFileSync(FILE, 'utf8'))) rooms.set(r.code, r); } catch {}
+try { for (const r of JSON.parse(fs.readFileSync(FILE, 'utf8'))) { r.quests = r.quests || []; rooms.set(r.code, r); } } catch {}
 let saveT;
 const save = () => {
   clearTimeout(saveT);
@@ -49,6 +49,8 @@ const LANDMARKS = [
   ['Красное Ущелье', 1350, 550], ['Каньон Страха', 1355, 670], ['Пески Забвения', 1360, 955],
   ['Остров Отчаяния', 305, 910],
 ].map(([name, px, py]) => ({ name, x: Math.round((px / 1499) * GRID_W), y: Math.round((py / 1049) * GRID_H) }));
+const cultureOfName = (n) => (/эльф|Лорнэйдар|Траун|Маунтайн/.test(n) ? (n.includes('Маунтайн') ? 'human' : 'elf') : /полурос|Хоббитон|Мираж/.test(n) ? 'halfling' : /дварф|Магор|Подземн/.test(n) ? 'dwarf' : 'human');
+for (const l of LANDMARKS) l.culture = cultureOfName(l.name);
 const SPAWN = LANDMARKS.find((l) => l.name.startsWith('Стальград'));
 const SLOTS = ['head', 'body', 'hands', 'legs', 'feet', 'accessory', 'weapon', 'offhand'];
 
@@ -104,11 +106,56 @@ const BUILD = {
   smithy: [4, 3], tavern: [5, 3], market: [5, 3], temple: [4, 4], shop: [4, 3], alchemist: [4, 3],
   stable: [5, 3], guild: [5, 3], castle: [7, 5], tower: [3, 3], mill: [4, 3], farm: [4, 3],
   barracks: [5, 3], inn: [5, 3], well: [1, 1], house: [3, 3],
-  library: [5, 4], healer: [4, 3], palace: [8, 6], hut: [2, 2], elder: [4, 3],
+  library: [5, 4], healer: [4, 3], palace: [8, 6], hut: [2, 2], elder: [4, 3], board: [2, 1],
 };
+const CULT = { human: 'людей', elf: 'эльфов', dwarf: 'дварфов', halfling: 'полуросликов' };
+const CULT_RACE = { human: 'человек', elf: 'эльф', dwarf: 'дварф', halfling: 'полурослик' };
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const shuffle = (a) => a.map((v) => [Math.random(), v]).sort((p, q) => p[0] - q[0]).map((p) => p[1]);
+const PLANS = {
+  village: { size: ['small', 'small', 'medium'], must: ['well'], pool: ['tavern', 'smithy', 'shop', 'healer', 'elder', 'farm', 'mill', 'stable', 'temple', 'alchemist'], n: [2, 4], huts: 2, houses: 0.8, walls: 0.05, river: 0.4 },
+  town: { size: ['medium'], must: ['tavern', 'market', 'smithy', 'temple', 'well', 'elder'], pool: ['shop', 'healer', 'alchemist', 'stable', 'inn', 'guild', 'library', 'mill', 'barracks'], n: [3, 5], huts: 1, houses: 1, walls: 0.3, river: 0.5 },
+  city: { size: ['large'], must: ['tavern', 'inn', 'market', 'smithy', 'temple', 'library', 'healer', 'guild', 'barracks', 'well', 'shop', 'alchemist', 'stable', 'elder'], pool: ['tower', 'mill', 'farm'], n: [0, 2], huts: 0, houses: 1.2, walls: 0.8, river: 0.5 },
+  capital: { size: ['large'], must: ['palace', 'tower', 'tavern', 'inn', 'market', 'smithy', 'temple', 'library', 'healer', 'guild', 'barracks', 'well', 'shop', 'alchemist', 'stable', 'elder'], pool: ['mill', 'farm'], n: [0, 1], huts: 0, houses: 1.3, walls: 1, river: 0.6 },
+  fort: { size: ['medium'], must: ['castle', 'barracks', 'smithy', 'well', 'stable', 'tower'], pool: ['tavern', 'healer'], n: [0, 1], huts: 0, houses: 0.3, walls: 1, river: 0.2 },
+  port: { size: ['medium'], must: ['tavern', 'market', 'inn', 'well', 'smithy'], pool: ['shop', 'healer', 'temple', 'guild', 'alchemist'], n: [1, 3], huts: 1, houses: 0.9, walls: 0.1, river: 1 },
+};
+const BNAME = { smithy: 'Кузня', tavern: 'Таверна', market: 'Рынок', temple: 'Храм', shop: 'Лавка', alchemist: 'Алхимик', healer: 'Знахарь', library: 'Библиотека', elder: 'Дом старосты', hut: 'Хижина', stable: 'Конюшня', guild: 'Гильдия', castle: 'Замок', palace: 'Дворец', tower: 'Башня', mill: 'Мельница', farm: 'Ферма', barracks: 'Казармы', inn: 'Постоялый двор', well: 'Колодец', board: 'Доска объявлений', house: 'Дом' };
+const TAVERNS = ['Золотой дракон', 'Пьяный гном', 'Весёлый кабан', 'Тихая гавань', 'Ржавый кубок', 'Серебряный олень', 'Три бочки', 'Хромой пёс'];
+function bname(type, culture) {
+  if (type === 'tavern' || type === 'inn') return (type === 'inn' ? 'Двор' : 'Таверна') + ' «' + pick(TAVERNS) + '»';
+  if (culture === 'elf') { if (type === 'temple') return 'Храм Лунного света'; if (type === 'library') return 'Хранилище свитков'; if (type === 'elder') return 'Дом хранителя'; if (type === 'palace') return 'Чертог'; }
+  if (culture === 'dwarf') { if (type === 'temple') return 'Храм Горнила'; if (type === 'elder') return 'Дом тана'; if (type === 'palace') return 'Каменный чертог'; if (type === 'market') return 'Торговый зал'; }
+  if (culture === 'halfling' && type === 'elder') return 'Дом бургомистра';
+  return BNAME[type] || 'Здание';
+}
+function autoBuildings(plan, extra, culture) {
+  const out = [];
+  const add = (type) => out.push({ type, name: bname(type, culture) });
+  for (const t of plan.must) add(t);
+  const k = plan.n[0] + Math.floor(Math.random() * (plan.n[1] - plan.n[0] + 1));
+  for (const t of shuffle(plan.pool).slice(0, k)) add(t);
+  for (let i = 0; i < plan.huts * Math.random() * 2; i++) add('hut');
+  for (const b of Array.isArray(extra) ? extra : []) {
+    if (!BUILD[b?.type] || b.type === 'house') continue;
+    const ex = out.find((o) => o.type === b.type);
+    if (ex) { if (b.name) ex.name = String(b.name).slice(0, 40); } else out.push({ type: b.type, name: String(b.name || bname(b.type, culture)).slice(0, 40) });
+  }
+  return out;
+}
 const SIZES = { small: [28, 20, 6], medium: [36, 24, 12], large: [44, 30, 20] };
 function buildScene(spec) {
-  const [w, h, nHouses] = SIZES[spec.size] || SIZES.medium;
+  const kind = PLANS[spec.kind] ? spec.kind : 'village';
+  const plan = PLANS[kind];
+  const size = SIZES[spec.size] ? spec.size : pick(plan.size);
+  const culture = CULT[spec.culture] ? spec.culture : 'human';
+  spec = { ...spec, kind, size, culture };
+  if (spec.walls == null) spec.walls = Math.random() < plan.walls;
+  if (spec.river == null) spec.river = Math.random() < plan.river;
+  if (spec.forest == null) spec.forest = culture === 'elf' || Math.random() < 0.35;
+  spec.buildings = autoBuildings(plan, spec.buildings, culture);
+  const [w, h, baseHouses] = SIZES[size];
+  const nHouses = Math.max(2, Math.round(baseHouses * plan.houses * (0.8 + Math.random() * 0.4)));
   const tiles = Array.from({ length: h }, () => Array(w).fill('.'));
   const occ = Array.from({ length: h }, () => Array(w).fill(false));
   const cx = Math.floor(w / 2), cy = Math.floor(h / 2), m = 2;
@@ -156,6 +203,7 @@ function buildScene(spec) {
     else if (['farm', 'mill', 'stable'].includes(b.type)) place(b.type, b.name, Math.random() < 0.5 ? 5 : w - 6, h - 5);
     else place(b.type, b.name, cx + (Math.random() - 0.5) * 8, cy + (Math.random() - 0.5) * 6);
   }
+  place('board', BNAME.board, cx + 3, cy - 3);
   for (let i = 0; i < nHouses; i++) place('house', 'Дом', cx + (Math.random() - 0.5) * w * 0.7, cy + (Math.random() - 0.5) * h * 0.7);
   const edge = spec.forest ? 5 : 2;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
@@ -168,7 +216,7 @@ function buildScene(spec) {
     if (Math.random() < p) tiles[y][x] = 't';
   }
   return {
-    id: rid(8), name: String(spec.name || 'Поселение').slice(0, 80), kind: spec.kind || 'village',
+    id: rid(8), culture, name: String(spec.name || 'Поселение').slice(0, 80), kind,
     description: String(spec.description || '').slice(0, 1500),
     w, h, tiles: tiles.map((r) => r.join('')), buildings, spawn: { x: 2, y: cy },
   };
@@ -198,9 +246,95 @@ function openScene(room, spec) {
     if (t.wx == null) { t.wx = t.x; t.wy = t.y; }
     if (t.type !== 'player') t.away = true;
   }
+  spec = { ...spec };
+  if (!CULT[spec.culture]) spec.culture = inferCulture(room);
   room.scene = buildScene(spec);
   for (const t of Object.values(room.tokens)) if (t.type === 'player') { t.x = -99; t.y = -99; }
   for (const t of Object.values(room.tokens)) if (t.type === 'player') Object.assign(t, freeCell(room));
+  populate(room);
+}
+function inferCulture(room) {
+  const ps = Object.values(room.tokens).filter((t) => t.type === 'player');
+  if (!ps.length || room.map.bg !== '/world.jpg') return 'human';
+  const ax = ps.reduce((a, t) => a + (t.wx ?? t.x), 0) / ps.length, ay = ps.reduce((a, t) => a + (t.wy ?? t.y), 0) / ps.length;
+  let best = null, bd = Infinity;
+  for (const l of LANDMARKS) { const d = (l.x - ax) ** 2 + (l.y - ay) ** 2; if (d < bd) { bd = d; best = l; } }
+  return best ? best.culture : 'human';
+}
+const PERSON = {
+  human: ['Бран', 'Годрик', 'Эдвин', 'Мира', 'Лиза', 'Томас', 'Ольга', 'Гарет', 'Кира', 'Виктор', 'Анна', 'Рольф'],
+  elf: ['Ариэль', 'Эларион', 'Лиррэль', 'Тэйлиан', 'Силиэль', 'Фаэрон', 'Мираэль', 'Элоран'],
+  dwarf: ['Торин', 'Дарин', 'Брунгильда', 'Борин', 'Хельга', 'Грундир', 'Тордис', 'Балин'],
+  halfling: ['Пиппин', 'Рози', 'Мерри', 'Лобелия', 'Сэмвис', 'Нола', 'Хэмфаст', 'Присцилла'],
+};
+const ROLE = { smithy: 'кузнец', tavern: 'трактирщик', inn: 'хозяин постоялого двора', healer: 'знахарь', library: 'хранитель библиотеки', temple: 'жрец', elder: 'староста', market: 'торговец', palace: 'придворный', guild: 'глава гильдии', barracks: 'капитан стражи', shop: 'лавочник', alchemist: 'алхимик', farm: 'фермер', mill: 'мельник', stable: 'конюх', castle: 'кастелян' };
+const TALK = {
+  кузнец: ['Железо дорожает с каждым месяцем. Вам нужно оружие или починка?', 'Путники, не встречали ли вы по дороге торговца рудой? Он должен был прийти ещё на той неделе.'],
+  трактирщик: ['Добро пожаловать! У нас лучший эль в округе. Слышали новости с тракта?', 'Путники, вы не против помочь? В моём погребе завелось что-то неладное.'],
+  'хозяин постоялого двора': ['Комнаты есть, но ночью лучше не выходить: у ворот шастают тени.', 'Вы издалека? Расскажите, что творится на дорогах?'],
+  знахарь: ['Травы подорожали, а ходить за ними в лес стало опасно. Не поможете?', 'Если ранены, заходите. Но платить придётся.'],
+  'хранитель библиотеки': ['Тише. Здесь хранится память королевства. Ищете что-то конкретное?', 'Пропал один том. Если вы что-то слышали о нём, дайте знать.'],
+  жрец: ['Да пребудет с вами свет. Нужна ли вам защита перед дорогой?', 'На кладбище творится неладное. Добрые люди нужны нам.'],
+  староста: ['Рад видеть новых лиц. Нашей деревне пригодятся смелые руки.', 'Вы не из королевской стражи? Нам нужна помощь с разбойниками.'],
+  торговец: ['Лучшие товары по лучшим ценам! Не желаете взглянуть?', 'Караван задерживается. Если встретите его, передайте, что я жду.'],
+  придворный: ['Его величество не принимает без записи. Но у короны всегда найдётся работа для храбрых.', 'Следите за словами в этих стенах, путники.'],
+  'глава гильдии': ['Гильдия всегда ищет надёжных людей. Задания есть на любой вкус.', 'Один из наших не вернулся из рейда. Найдите его.'],
+  'капитан стражи': ['Держитесь порядка, и неприятностей не будет. Хотя лишние мечи нам не помешают.', 'На тракте опять разбойники. Если вы мне поможете, не обижу.'],
+  лавочник: ['Заходите, у меня есть всё, что нужно в пути.', 'Кто-то повадился красть товар со склада. Подозреваю соседских мальчишек.'],
+  алхимик: ['Осторожно с флаконами! Мне нужны ингредиенты, не поможете достать?', 'Нет, это не взрывоопасно. Пока что.'],
+  фермер: ['Урожай в этом году скудный, а волки совсем обнаглели.', 'Вы не видели мою заблудившуюся корову?'],
+  мельник: ['Мельница стоит: жернов треснул. Знаете хорошего камнетёса?', 'Тут шумно, говорите громче!'],
+  конюх: ['Лошади нервничают. Что-то рыщет в округе по ночам.', 'Хороший конь стоит денег, плохой стоит ещё больше.'],
+  кастелян: ['Замок на осадном положении. Говорите быстро.', 'Нам нужны припасы и надёжные воины.'],
+};
+const QUEST_T = {
+  tavern: ['Крысы в погребе', 'В погребе таверны завелись гигантские крысы. Нужно избавить хозяина от напасти.', '30 зм'],
+  smithy: ['Руда для кузнеца', 'Кузнецу нужно десять кусков железной руды из заброшенной штольни.', '50 зм'],
+  healer: ['Редкие травы', 'Знахарю нужны лунные травы с опушки леса. Опасайтесь волков.', '40 зм и зелье'],
+  library: ['Пропавший свиток', 'Из библиотеки пропал древний свиток. Говорят, его видели у разбойников.', '100 зм'],
+  temple: ['Неупокоенные', 'По ночам у храма из земли встают скелеты. Нужно упокоить их.', '80 зм'],
+  farm: ['Волки у стада', 'Стая волков режет скот. Нужно найти логово.', '35 зм'],
+  elder: ['Пропавший караван', 'Караван с припасами не вернулся с тракта. Найдите его или выясните причину.', '90 зм'],
+  stable: ['Сбежавший жеребец', 'Лучший жеребец сорвался с привязи и ускакал в лес.', '25 зм'],
+  barracks: ['Разбойники на тракте', 'Шайка разбойников грабит путников. Стража не справляется.', '120 зм'],
+  palace: ['Поручение короны', 'Королевский двор ищет героев для деликатного поручения.', '200 зм'],
+  guild: ['Заказ гильдии', 'Гильдия размещает заказ на уничтожение чудовища в окрестностях.', '150 зм'],
+  market: ['Задержанный караван', 'Торговцы платят за сопровождение каравана до соседнего города.', '60 зм'],
+  mill: ['Треснувший жернов', 'Мельнику нужен новый жернов из каменоломни.', '45 зм'],
+  alchemist: ['Ингредиенты для зелий', 'Алхимику нужны сердца болотных троллей и светящиеся грибы.', '70 зм'],
+  any: ['Слухи о нечисти', 'Местные видят странные огни в лесу. Разузнайте, что там.', '40 зм'],
+};
+function makeQuest(room, type, giver, onBoard, place) {
+  const t = QUEST_T[type] || QUEST_T.any;
+  const q = { id: 'q' + rid(8), title: t[0], description: t[1], reward: t[2], giver: giver || '', place: place || '', onBoard: !!onBoard, status: 'open', takenBy: [] };
+  room.quests.push(q);
+  return q;
+}
+function walkableCell(room, x, y) {
+  const sc = room.scene;
+  if (!sc || x < 0 || y < 0 || x >= sc.w || y >= sc.h) return false;
+  const c = sc.tiles[y][x];
+  if (c !== '.' && c !== 'r') return false;
+  if (sc.buildings.some((b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h)) return false;
+  return !Object.values(room.tokens).some((t) => !t.away && t.x === x && t.y === y);
+}
+function populate(room) {
+  const sc = room.scene, cul = sc.culture;
+  const cnt = { village: 3, town: 4, port: 4, fort: 3, city: 6, capital: 7 }[sc.kind] || 3;
+  const cand = shuffle(sc.buildings.filter((b) => ROLE[b.type])).slice(0, cnt);
+  for (const b of cand) {
+    let pos = null;
+    const bx = b.x + Math.floor(b.w / 2), by = b.y + b.h;
+    for (let r = 0; r < 4 && !pos; r++) for (const [dx, dy] of [[0, r], [-1, r], [1, r], [r, 0], [-r, 0]]) if (!pos && walkableCell(room, bx + dx, by + dy)) pos = { x: bx + dx, y: by + dy };
+    if (!pos) continue;
+    const role = ROLE[b.type];
+    const t = addToken(room, { name: pick(PERSON[cul]), type: 'npc', ...pos });
+    t.race = CULT_RACE[cul]; t.role = role; t.talk = { text: pick(TALK[role] || ['Добрый день, путники.']) };
+    if (Math.random() < 0.6) { const q = makeQuest(room, b.type, t.name, false, sc.name); t.questId = q.id; }
+  }
+  const types = shuffle(sc.buildings.map((b) => b.type).filter((x) => QUEST_T[x]));
+  const nb = { village: 2, town: 3, port: 3, fort: 2, city: 4, capital: 5 }[sc.kind] || 2;
+  for (const type of [...new Set(types)].slice(0, nb)) makeQuest(room, type, 'Доска объявлений', true, sc.name);
 }
 function closeScene(room) {
   room.scene = null;
@@ -218,7 +352,7 @@ function createRoom() {
   const room = {
     code: rid(5).toUpperCase(), masterKey: rid(16),
     map: { w: GRID_W, h: GRID_H, bg: '/world.jpg' }, spawn: { x: SPAWN.x, y: SPAWN.y },
-    tokens: {}, log: [], location: { name: 'Стальград', description: 'Столица Аарда. Отсюда начинается путь.' }, chat: [],
+    tokens: {}, quests: [], log: [], location: { name: 'Стальград', description: 'Столица Аарда. Отсюда начинается путь.' }, chat: [],
   };
   rooms.set(room.code, room);
   save();
@@ -244,8 +378,10 @@ function log(room, text, kind = 'info') {
 }
 
 // Что видит каждый зритель (скрываем чужие данные).
-function viewToken(t, s) {
-  const base = { id: t.id, name: t.name, x: t.x, y: t.y, type: t.type, owner: t.owner, color: t.color, hidden: t.hidden };
+function viewToken(t, s, room) {
+  const base = { id: t.id, name: t.name, x: t.x, y: t.y, type: t.type, owner: t.owner, color: t.color, hidden: t.hidden, race: t.race, role: t.role, talk: t.talk, questId: t.questId, say: t.say };
+  const q = t.questId && room ? (room.quests || []).find((x) => x.id === t.questId) : null;
+  if (q) base.quest = { id: q.id, title: q.title, description: q.description, reward: q.reward, status: q.status, taken: q.takenBy.includes(s.data.pid) };
   const c = t.character;
   if (s.data.role === 'master' || t.owner === s.data.pid) return { ...base, character: c };
   if (t.type === 'player') {
@@ -254,6 +390,13 @@ function viewToken(t, s) {
   return { ...base, character: { dead: c.hp.cur <= 0, hpPct: c.hp.max ? Math.round((c.hp.cur / c.hp.max) * 100) : 0 } };
 }
 
+function visibleQuests(room, s) {
+  const qs = room.quests || [];
+  if (s.data.role === 'master') return qs;
+  const place = room.scene ? room.scene.name : '';
+  return qs.filter((q) => q.takenBy.includes(s.data.pid) || (q.onBoard && q.status === 'open' && q.place === place))
+    .map((q) => ({ id: q.id, title: q.title, description: q.description, reward: q.reward, giver: q.giver, place: q.place, onBoard: q.onBoard, status: q.status, taken: q.takenBy.includes(s.data.pid), takenBy: [] }));
+}
 function emitState(room) {
   save();
   for (const [, s] of io.sockets.sockets) {
@@ -261,7 +404,9 @@ function emitState(room) {
     const master = s.data.role === 'master';
     s.emit('state:sync', {
       map: room.scene ? { w: room.scene.w, h: room.scene.h, bg: '' } : room.map, scene: room.scene || null, location: room.location,
-      tokens: Object.values(room.tokens).filter((t) => !t.away && (master || !t.hidden)).map((t) => viewToken(t, s)),
+      tokens: Object.values(room.tokens).filter((t) => !t.away && (master || !t.hidden)).map((t) => viewToken(t, s, room)),
+      quests: visibleQuests(room, s),
+      myQuest: Object.values(room.tokens).find((t) => t.owner === s.data.pid)?.activeQuest || null,
       log: room.log.slice(-60),
     });
   }
@@ -292,13 +437,17 @@ const TOOLS = [
     input_schema: obj({ title: { type: 'string' }, description: { type: 'string' },
       enemies: { type: 'array', items: obj({ name: { type: 'string' }, hp: { type: 'integer' },
         x: { type: 'integer' }, y: { type: 'integer' } }, ['name', 'hp', 'x', 'y']) } }, ['title', 'description', 'enemies']) },
-  { name: 'open_location', description: 'Открыть вид сверху на город, деревню, порт или замок: сервер сам нарисует план с дорогами, домами и указанными зданиями. Используй, когда мастер просит показать или открыть поселение. Типы зданий: smithy кузня, tavern таверна, market рынок, temple храм, shop лавка, alchemist алхимик, healer знахарь/лекарь, library библиотека, elder дом старосты/старшины, hut хижина, stable конюшня, guild гильдия, castle замок, palace дворец, tower башня, mill мельница, farm ферма, barracks казармы, inn постоялый двор, well колодец. Дворец и замок помещаются только в medium и large. Дома добавятся сами.',
+  { name: 'open_location', description: 'Открыть вид сверху на поселение. Сервер сам выберет и нарисует здания, жителей и доску объявлений по типу поселения: деревня маленькая и скромная, город и столица большие и богатые. НЕ перечисляй здания, если мастер не просил конкретные. Культура определяется по месту на карте, указывай её только если мастер назвал.',
     input_schema: obj({
-      name: { type: 'string' }, kind: { type: 'string', enum: ['village', 'city', 'port', 'fort'] },
-      description: { type: 'string' }, size: { type: 'string', enum: ['small', 'medium', 'large'] },
+      name: { type: 'string' }, kind: { type: 'string', enum: ['village', 'town', 'city', 'capital', 'fort', 'port'] },
+      culture: { type: 'string', enum: ['human', 'elf', 'dwarf', 'halfling'] }, description: { type: 'string' },
       walls: { type: 'boolean' }, river: { type: 'boolean' }, forest: { type: 'boolean' },
-      buildings: { type: 'array', items: obj({ type: { type: 'string', enum: Object.keys(BUILD).filter((k) => k !== 'house') }, name: { type: 'string' } }, ['type', 'name']) },
-    }, ['name', 'kind', 'description', 'buildings']) },
+      buildings: { type: 'array', items: obj({ type: { type: 'string', enum: Object.keys(BUILD).filter((k) => k !== 'house' && k !== 'board') }, name: { type: 'string' } }, ['type', 'name']) },
+    }, ['name', 'kind', 'description']) },
+  { name: 'add_quest', description: 'Добавить задание на доску объявлений текущего поселения (или в мир, если локация не открыта).',
+    input_schema: obj({ title: { type: 'string' }, description: { type: 'string' }, reward: { type: 'string' } }, ['title', 'description']) },
+  { name: 'npc_say', description: 'Заставить жителя или НПС по имени сказать фразу или задать вопрос игрокам (появится над ним).',
+    input_schema: obj({ name: { type: 'string' }, text: { type: 'string' } }, ['name', 'text']) },
   { name: 'close_location', description: 'Закрыть вид поселения и вернуть всех на карту мира.', input_schema: obj({}, []) },
 ];
 
@@ -307,6 +456,7 @@ async function askClaude(room, text) {
   const world = {
     карта: { ширина: dims(room).w, высота: dims(room).h },
     локация: room.location,
+    задания: (room.quests || []).filter((q) => q.status === 'open').map((q) => q.title + ' (' + (q.place || 'мир') + ')'),
     токены: Object.values(room.tokens).filter((t) => !t.away).map((t) => ({
       имя: t.name, тип: t.type, x: t.x, y: t.y,
       хп: `${t.character.hp.cur}/${t.character.hp.max}`, мана: `${t.character.mana.cur}/${t.character.mana.max}`,
@@ -315,6 +465,7 @@ async function askClaude(room, text) {
   };
   const system = 'Ты помощник мастера настольной игры в стиле D&D. Отвечай по-русски, кратко и атмосферно. ' +
     'Изменения на карте и в мире делай ТОЛЬКО через инструменты, координаты в пределах карты (с нуля). ' +
+    'Когда мастер просит открыть поселение, вызови open_location: здания, жителей и доску объявлений сервер создаст сам по типу поселения (деревня скромная, город и столица большие). Новые задания для доски добавляй через add_quest, реплики жителей через npc_say. ' +
     'Не придумывай токены, которых нет в списке, для move_token и set_hp. ' +
     (room.scene ? sceneNote(room) : '') +
     (!room.scene && room.map.bg === '/world.jpg'
@@ -360,6 +511,12 @@ async function askClaude(room, text) {
   return { reply: reply.trim(), actions };
 }
 
+function npcSay(room, t, text) {
+  const id = rid(6);
+  t.say = { text: str(text, 200), id };
+  log(room, `${t.name}: ${str(text, 200)}`, 'story');
+  setTimeout(() => { if (t.say && t.say.id === id) { delete t.say; emitState(room); } }, 20000);
+}
 const byName = (room, n) => Object.values(room.tokens).find((t) => t.name.toLowerCase() === String(n).toLowerCase());
 const clampPos = (room, x, y) => ({ x: int(x, 0, dims(room).w - 1), y: int(y, 0, dims(room).h - 1) });
 
@@ -394,6 +551,15 @@ function applyAction(room, a) {
       room.location = { name: str(a.name, 80), description: str(a.description, 1500) };
       log(room, `Отряд входит: ${room.location.name}. ${room.location.description}`, 'story');
       break;
+    case 'add_quest':
+      room.quests.push({ id: 'q' + rid(8), title: str(a.title, 80), description: str(a.description, 600), reward: str(a.reward, 80), giver: 'Доска объявлений', place: room.scene ? room.scene.name : '', onBoard: true, status: 'open', takenBy: [] });
+      log(room, `На доске объявлений новое задание: ${str(a.title, 80)}`, 'story');
+      break;
+    case 'npc_say': {
+      const t = byName(room, a.name); if (!t) return;
+      npcSay(room, t, a.text);
+      break;
+    }
     case 'close_location':
       if (room.scene) { closeScene(room); log(room, 'Отряд возвращается на карту мира'); }
       break;
@@ -410,7 +576,8 @@ function applyAction(room, a) {
 // ---------- сокеты ----------
 io.on('connection', (socket) => {
   socket.data = { code: null, role: null, pid: null };
-  const room = () => rooms.get(socket.data.code);
+  const room = () => { const r = rooms.get(socket.data.code); if (r && !r.quests) r.quests = []; return r; };
+  const myTok = (r) => Object.values(r.tokens).find((t) => t.owner === socket.data.pid);
   const master = () => socket.data.role === 'master';
   const safe = (fn) => (...args) => {
     const ack = typeof args[args.length - 1] === 'function' ? args.pop() : () => {};
@@ -508,6 +675,63 @@ io.on('connection', (socket) => {
     if (!res2) return ack({ ok: false, error: 'Формат: 2d6+1' });
     const who = master() ? 'Мастер' : Object.values(r.tokens).find((t) => t.owner === socket.data.pid)?.name || 'Игрок';
     log(r, `🎲 ${who} бросает ${res2.expr}: [${res2.rolls.join(', ')}] = ${res2.total}`, 'dice');
+    ack({ ok: true });
+    emitState(r);
+  }));
+
+  socket.on('quest:add', safe((d, ack) => {
+    const r = room(); if (!r || !master()) return ack({ ok: false });
+    r.quests.push({ id: 'q' + rid(8), title: str(d.title, 80) || 'Задание', description: str(d.description, 600), reward: str(d.reward, 80),
+      giver: 'Доска объявлений', place: r.scene ? r.scene.name : '', onBoard: true, status: 'open', takenBy: [] });
+    log(r, `На доске объявлений новое задание: ${str(d.title, 80) || 'Задание'}`, 'story');
+    ack({ ok: true });
+    emitState(r);
+  }));
+  socket.on('quest:remove', safe(({ id }, ack) => {
+    const r = room(); if (!r || !master()) return ack({ ok: false });
+    r.quests = r.quests.filter((q) => q.id !== id);
+    for (const t of Object.values(r.tokens)) { if (t.activeQuest === id) delete t.activeQuest; if (t.questId === id) delete t.questId; }
+    ack({ ok: true });
+    emitState(r);
+  }));
+  socket.on('quest:done', safe(({ id }, ack) => {
+    const r = room(); const q = r?.quests.find((x) => x.id === id);
+    if (!q || !master()) return ack({ ok: false });
+    q.status = 'done';
+    log(r, `Задание выполнено: ${q.title}. Награда: ${q.reward || 'слава'}`, 'story');
+    ack({ ok: true });
+    emitState(r);
+  }));
+  socket.on('quest:take', safe(({ id }, ack) => {
+    const r = room(); const q = r?.quests.find((x) => x.id === id);
+    const me = r && myTok(r);
+    if (!q || !me || q.status !== 'open') return ack({ ok: false, error: 'Задание недоступно' });
+    const visible = (q.onBoard && q.place === (r.scene ? r.scene.name : '')) || Object.values(r.tokens).some((t) => t.questId === id && !t.away);
+    if (!visible) return ack({ ok: false, error: 'Задание недоступно' });
+    if (!q.takenBy.includes(socket.data.pid)) { q.takenBy.push(socket.data.pid); log(r, `${me.name} берёт задание «${q.title}»`, 'story'); }
+    me.activeQuest = id;
+    ack({ ok: true });
+    emitState(r);
+  }));
+  socket.on('quest:pin', safe(({ id }, ack) => {
+    const r = room(); const q = r?.quests.find((x) => x.id === id); const me = r && myTok(r);
+    if (!q || !me || !q.takenBy.includes(socket.data.pid)) return ack({ ok: false });
+    me.activeQuest = id;
+    ack({ ok: true });
+    emitState(r);
+  }));
+  socket.on('quest:drop', safe(({ id }, ack) => {
+    const r = room(); const q = r?.quests.find((x) => x.id === id); const me = r && myTok(r);
+    if (!q || !me) return ack({ ok: false });
+    q.takenBy = q.takenBy.filter((p) => p !== socket.data.pid);
+    if (me.activeQuest === id) delete me.activeQuest;
+    ack({ ok: true });
+    emitState(r);
+  }));
+  socket.on('npc:say', safe(({ id, text }, ack) => {
+    const r = room(); const t = r?.tokens[id];
+    if (!t || !master() || !text) return ack({ ok: false });
+    npcSay(r, t, text);
     ack({ ok: true });
     emitState(r);
   }));

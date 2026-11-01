@@ -1,5 +1,6 @@
 // Человечек, на котором видна надетая одежда и оружие. Пользовательский текст в SVG не вставляется:
 // из него только выбираются тип предмета и цвет из готового набора.
+import { raceFeatures } from './races.js';
 export const SLOT_NAMES = {
   head: 'Голова', body: 'Тело', hands: 'Руки', legs: 'Ноги', feet: 'Ступни',
   accessory: 'Аксессуар', weapon: 'В правой руке', offhand: 'В левой руке',
@@ -59,11 +60,14 @@ function shieldSvg(text) {
   return `<g transform="translate(40 168)">${shape}<circle r="7" fill="#d4a62a" stroke="#8a6a1a" stroke-width="2"/></g>`;
 }
 
-function build(eq, name) {
+function build(eq, name, race, phase = 0) {
   const g = (k) => String(eq[k] || '').toLowerCase();
   const head = g('head'), body = g('body'), hands = g('hands'), legs = g('legs'), feet = g('feet'), acc = g('accessory');
-  const hair = HAIR[[...String(name || '')].reduce((a, c) => a + c.charCodeAt(0), 0) % HAIR.length];
-  let s = '';
+  const rf = raceFeatures(race, name);
+  const SKIN = rf.skin;
+  const dxL = phase === 1 ? -5 : phase === 2 ? 5 : 0, dxR = -dxL;
+  const hair = rf.hair || HAIR[[...String(name || '')].reduce((a, c) => a + c.charCodeAt(0), 0) % HAIR.length];
+  let s = rf.behind;
   // плащ за спиной
   if (has(/плащ|накидк|мантия-?плащ/, acc) || has(/плащ|накидк/, body)) {
     const c = colorOf(acc || body, '#8a2f2f');
@@ -72,13 +76,13 @@ function build(eq, name) {
   // ноги
   const robe = has(/мантия|роба|ряса|халат/, body);
   const pc = legs ? colorOf(legs, has(/поножи|латн/, legs) ? '#aeb6c2' : '#6a5a48') : '#7a6a58';
-  s += `<rect x="76" y="170" width="22" height="86" rx="9" fill="${pc}" stroke="#000" stroke-opacity=".3" stroke-width="2"/><rect x="102" y="170" width="22" height="86" rx="9" fill="${pc}" stroke="#000" stroke-opacity=".3" stroke-width="2"/>`;
-  if (has(/поножи|латн/, legs)) s += `<circle cx="87" cy="214" r="9" fill="#cfd5dd"/><circle cx="113" cy="214" r="9" fill="#cfd5dd"/>`;
+  s += `<rect transform="translate(${dxL} 0)" x="76" y="170" width="22" height="86" rx="9" fill="${pc}" stroke="#000" stroke-opacity=".3" stroke-width="2"/><rect transform="translate(${dxR} 0)" x="102" y="170" width="22" height="86" rx="9" fill="${pc}" stroke="#000" stroke-opacity=".3" stroke-width="2"/>`;
+  if (has(/поножи|латн/, legs)) s += `<circle transform="translate(${dxL} 0)" cx="87" cy="214" r="9" fill="#cfd5dd"/><circle transform="translate(${dxR} 0)" cx="113" cy="214" r="9" fill="#cfd5dd"/>`;
   // обувь
   if (feet) {
     const c = colorOf(feet, '#5a3d22');
-    s += `<path d="M70 248 H100 V268 Q100 278 90 278 H76 Q68 278 68 268Z" fill="${c}" stroke="#000" stroke-opacity=".4" stroke-width="2"/><path d="M100 248 H130 V268 Q132 278 124 278 H110 Q100 278 100 268Z" fill="${c}" stroke="#000" stroke-opacity=".4" stroke-width="2"/>`;
-  } else s += `<ellipse cx="86" cy="262" rx="13" ry="6" fill="${SKIN}"/><ellipse cx="114" cy="262" rx="13" ry="6" fill="${SKIN}"/>`;
+    s += `<path transform="translate(${dxL} 0)" d="M70 248 H100 V268 Q100 278 90 278 H76 Q68 278 68 268Z" fill="${c}" stroke="#000" stroke-opacity=".4" stroke-width="2"/><path transform="translate(${dxR} 0)" d="M100 248 H130 V268 Q132 278 124 278 H110 Q100 278 100 268Z" fill="${c}" stroke="#000" stroke-opacity=".4" stroke-width="2"/>`;
+  } else s += `<ellipse transform="translate(${dxL} 0)" cx="86" cy="262" rx="13" ry="6" fill="${SKIN}"/><ellipse transform="translate(${dxR} 0)" cx="114" cy="262" rx="13" ry="6" fill="${SKIN}"/>`;
   // тело
   let torso, bc;
   if (robe) {
@@ -109,31 +113,39 @@ function build(eq, name) {
     s += `<path d="M86 93 Q100 126 114 93" stroke="#d4a62a" stroke-width="2.5" fill="none"/><circle cx="100" cy="121" r="7" fill="${colorOf(acc, '#c0392b')}" stroke="#d4a62a" stroke-width="2"/>`;
   }
   // шея и голова
+  s += rf.horns + rf.ears;
   s += `<rect x="92" y="80" width="16" height="14" fill="${SKIN}"/><circle cx="100" cy="60" r="25" fill="${SKIN}" stroke="#000" stroke-opacity=".3" stroke-width="2"/>`;
-  s += `<path d="M75 58 Q76 30 100 32 Q124 30 125 58 Q112 44 100 46 Q88 44 75 58Z" fill="${hair}"/>`;
+  if (!rf.bald) s += rf.hairSvg || `<path d="M75 58 Q76 30 100 32 Q124 30 125 58 Q112 44 100 46 Q88 44 75 58Z" fill="${hair}"/>`;
   s += `<circle cx="91" cy="64" r="2.8" fill="#2a1a10"/><circle cx="109" cy="64" r="2.8" fill="#2a1a10"/><path d="M93 74 Q100 79 107 74" stroke="#7a3a2a" stroke-width="2" fill="none"/>`;
+  s += rf.face;
   if (head) {
-    const hcn = colorOf(head, '');
+    const hcn = (() => { for (const [re, c] of COLORS) if (re.test(head)) return c; return null; })();
     if (has(/корон|венец|диадем/, head)) s += `<path d="M77 42 L82 20 L91 35 L100 15 L109 35 L118 20 L123 42Z" fill="${colorOf(head, '#d4a62a')}" stroke="#8a6a1a" stroke-width="2"/><circle cx="100" cy="30" r="3.5" fill="#c0392b"/><circle cx="86" cy="36" r="2.5" fill="#3b5fb0"/><circle cx="114" cy="36" r="2.5" fill="#3f8a4a"/>`;
     else if (has(/шлем|каск|шишак/, head)) s += `<path d="M74 62 Q72 26 100 26 Q128 26 126 62 L119 62 L119 52 L81 52 L81 62Z" fill="${colorOf(head, '#aeb6c2')}" stroke="#4a4f58" stroke-width="2.5"/><rect x="97.5" y="50" width="5" height="20" fill="${colorOf(head, '#aeb6c2')}" stroke="#4a4f58" stroke-width="1.5"/><path d="M100 26 Q100 10 112 14 Q104 18 104 28Z" fill="#b3302e"/>`;
     else if (has(/капюшон/, head)) s += `<path d="M70 74 Q68 24 100 22 Q132 24 130 74 Q120 50 100 50 Q80 50 70 74Z" fill="${hcn || '#3a3a46'}" stroke="#000" stroke-opacity=".4" stroke-width="2"/>`;
     else if (has(/шляп|колпак|тюрбан|берет/, head)) s += `<ellipse cx="100" cy="44" rx="40" ry="9" fill="${hcn || '#5a3d6a'}" stroke="#000" stroke-opacity=".35" stroke-width="2"/><path d="M79 44 Q100 -10 121 44Z" fill="${hcn || '#5a3d6a'}" stroke="#000" stroke-opacity=".35" stroke-width="2"/>`;
     else s += `<path d="M76 52 Q100 22 124 52Z" fill="${hcn || '#7a5230'}" stroke="#000" stroke-opacity=".35" stroke-width="2"/><rect x="76" y="48" width="48" height="7" rx="3" fill="#000" fill-opacity=".2"/>`;
   }
-  return s;
+  return s + rf.top;
+}
+
+export function heroInner({ name, race, equipment, weapons, phase = 0 }) {
+  const eq = { ...(equipment || {}) };
+  const fallbackW = Array.isArray(weapons) && weapons[0] ? weapons[0].name : '';
+  const weapon = eq.weapon || fallbackW;
+  let s = build(eq, name, race, phase);
+  if (eq.offhand && has(/щит/, eq.offhand.toLowerCase())) s += shieldSvg(eq.offhand);
+  else if (eq.offhand) s += weaponSvg(eq.offhand, 56, 182, true);
+  if (weapon) s += weaponSvg(weapon, 144, 182, false);
+  const [sx, sy] = raceFeatures(race, name).scale;
+  return { inner: `<g transform="translate(100 278) scale(${sx} ${sy}) translate(-100 -278)">${s}</g>`, weapon, eq };
 }
 
 export function renderAvatar(box, token) {
   const c = token && token.character;
   if (!c || !c.equipment || typeof c.equipment !== 'object') { box.hidden = true; return; }
-  const eq = { ...c.equipment };
-  const fallbackW = Array.isArray(c.weapons) && c.weapons[0] ? c.weapons[0].name : '';
-  const weapon = eq.weapon || fallbackW;
-  let s = build(eq, token.name);
-  if (eq.offhand && has(/щит/, eq.offhand.toLowerCase())) s += shieldSvg(eq.offhand);
-  else if (eq.offhand) s += weaponSvg(eq.offhand, 56, 182, true);
-  if (weapon) s += weaponSvg(weapon, 144, 182, false);
-  box.querySelector('.av-svg').innerHTML = `<svg viewBox="0 -20 200 310" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Персонаж"><ellipse cx="100" cy="276" rx="60" ry="9" fill="#000" opacity=".25"/>${s}</svg>`;
+  const { inner, weapon, eq } = heroInner({ name: token.name, race: c.race, equipment: c.equipment, weapons: c.weapons });
+  box.querySelector('.av-svg').innerHTML = `<svg viewBox="0 -20 200 310" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Персонаж"><ellipse cx="100" cy="276" rx="60" ry="9" fill="#000" opacity=".25"/>${inner}</svg>`;
   const ul = box.querySelector('.av-list'); ul.textContent = '';
   for (const [k, label] of Object.entries(SLOT_NAMES)) {
     const v = k === 'weapon' ? weapon : eq[k];

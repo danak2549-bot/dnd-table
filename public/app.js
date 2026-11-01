@@ -1,6 +1,10 @@
 import { mountSheet } from './sheet.js';
 import { renderAvatar } from './avatar.js';
 import { mountInventory } from './inventory.js';
+import { mountQuests } from './quests.js';
+import { setSpriteLoadHandler } from './sprites.js';
+import { tickActors } from './actors.js';
+import { RACES } from './races.js';
 import { drawMap, hitToken, cellFromEvent, MAXZ } from './map.js';
 
 const $ = (s) => document.querySelector(s);
@@ -18,6 +22,7 @@ const selected = () => state?.tokens.find((t) => t.id === selId) || null;
 const ownToken = () => state?.tokens.find((t) => t.owner === me.pid) || null;
 const canEditTok = (t) => !!t && (me.role === 'master' || t.owner === me.pid);
 
+const quests = mountQuests($('#quests'), { socket, getState: () => state, isMaster: () => me.role === 'master' });
 const inv = mountInventory($('#inv'), { socket, getToken: selected });
 const sheet = mountSheet($('#sheet'), {
   socket, canEdit: () => canEditTok(selected()),
@@ -76,8 +81,24 @@ function renderAll() {
     }
   }
   renderLog(); redraw();
+  quests.render(state);
+  const mq = state.quests.find((q) => q.id === state.myQuest);
+  $('#qbanner').hidden = !(me.role === 'player' && mq);
+  if (mq) $('#qbanner').textContent = '★ Актуальное задание: ' + mq.title;
 }
-const redraw = () => state && drawMap($('#map'), state, selId, view);
+let raf = null, lastTs = 0, lastDraw = 0;
+function loop(ts) {
+  raf = null;
+  if (!state) return;
+  if (ts - lastDraw < 30) { raf = requestAnimationFrame(loop); return; }
+  const dt = Math.min(0.06, (ts - (lastTs || ts)) / 1000); lastTs = ts; lastDraw = ts;
+  const active = tickActors(state, dt, ts);
+  drawMap($('#map'), state, selId, view, ts);
+  if (active) raf = requestAnimationFrame(loop); else lastTs = 0;
+}
+const redraw = () => { if (state && !raf) raf = requestAnimationFrame(loop); };
+setSpriteLoadHandler(redraw);
+for (const r of RACES) { const o = document.createElement('option'); o.value = r; $('#races').appendChild(o); }
 window.addEventListener('resize', redraw);
 
 function renderLog() {
@@ -102,7 +123,7 @@ for (const [id, key] of [['#pr-race', 'race'], ['#pr-class', 'class'], ['#pr-lev
 // ---------- карта: выбор, перетаскивание, масштаб ----------
 const map = $('#map');
 const ptrs = new Map();
-let pan = null, pinch = null;
+let pan = null, pinch = null, tap = null;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 function zoomAt(cx, cy, ns) {
   ns = Math.max(1, Math.min(MAXZ, ns));
@@ -125,7 +146,9 @@ map.addEventListener('pointerdown', (e) => {
     pinch = { d: dist(a, b) || 1, s: view.s };
     return;
   }
-  const t = hitToken(state, cellFromEvent(map, state, e, view));
+  const cell = cellFromEvent(map, state, e, view);
+  const t = hitToken(state, cell);
+  tap = { x: e.clientX, y: e.clientY, tok: t || null, board: !t && !!state.scene && state.scene.buildings.some((b) => b.type === 'board' && cell.x >= b.x && cell.x < b.x + b.w && cell.y >= b.y && cell.y < b.y + b.h) };
   if (t) {
     selId = t.id; renderAll();
     if (canEditTok(t)) drag = { id: t.id, moved: false };
@@ -146,6 +169,11 @@ map.addEventListener('pointermove', (e) => {
   }
 });
 const endPtr = (e) => {
+  if (tap && e.type === 'pointerup' && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 8 && !(drag && drag.moved)) {
+    if (tap.tok && tap.tok.type === 'npc' && (tap.tok.talk || tap.tok.quest)) openDialog(tap.tok);
+    else if (tap.board) showTab('quests');
+  }
+  tap = null;
   ptrs.delete(e.pointerId);
   if (ptrs.size < 2) pinch = null;
   finishDrag(); pan = null;
@@ -171,11 +199,40 @@ $('#z-focus').onclick = () => {
 };
 
 // ---------- вкладки ----------
-$('#tabs').addEventListener('click', (e) => {
-  const b = e.target.closest('button'); if (!b) return;
-  for (const x of $('#tabs').children) x.classList.toggle('on', x === b);
-  for (const n of ['sheet', 'inv', 'log', 'master']) $('#p-' + n).hidden = n !== b.dataset.tab;
-});
+function showTab(n) {
+  for (const x of $('#tabs').children) x.classList.toggle('on', x.dataset.tab === n);
+  for (const k of ['sheet', 'inv', 'quests', 'log', 'master']) $('#p-' + k).hidden = k !== n;
+}
+$('#tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) showTab(b.dataset.tab); });
+$('#qbanner').onclick = () => showTab('quests');
+
+// ---------- диалог с жителем ----------
+let dlgTok = null;
+function openDialog(t) {
+  dlgTok = t;
+  $('#dlg-name').textContent = t.name;
+  $('#dlg-sub').textContent = [t.race, t.role].filter(Boolean).join(', ');
+  $('#dlg-text').textContent = t.say ? t.say.text : (t.talk ? t.talk.text : '');
+  const q = t.quest, box = $('#dlg-quest');
+  box.hidden = !q; box.textContent = '';
+  if (q) {
+    const a1 = document.createElement('div'); a1.className = 'q-title'; a1.textContent = 'Задание: ' + q.title;
+    const a2 = document.createElement('div'); a2.className = 'q-desc'; a2.textContent = q.description;
+    const a3 = document.createElement('div'); a3.className = 'q-meta'; a3.textContent = q.reward ? 'Награда: ' + q.reward : '';
+    box.append(a1, a2, a3);
+  }
+  $('#dlg-take').hidden = !(me.role === 'player' && q && q.status === 'open' && !q.taken);
+  $('#dlg-say').hidden = me.role !== 'master';
+  $('#dialog').hidden = false;
+}
+$('#dlg-close').onclick = () => { $('#dialog').hidden = true; };
+$('#dialog').addEventListener('click', (e) => { if (e.target.id === 'dialog') $('#dialog').hidden = true; });
+$('#dlg-take').onclick = () => {
+  if (!dlgTok || !dlgTok.quest) return;
+  socket.emit('quest:take', { id: dlgTok.quest.id }, (r) => { if (r && r.ok) { $('#dialog').hidden = true; showTab('quests'); } else alert((r && r.error) || 'Не удалось'); });
+};
+$('#dlg-say-go').onclick = () => { if (dlgTok && $('#dlg-say-in').value.trim()) { socket.emit('npc:say', { id: dlgTok.id, text: $('#dlg-say-in').value }, () => {}); $('#dlg-say-in').value = ''; $('#dialog').hidden = true; } };
+
 
 // ---------- кубы ----------
 $('#dice-go').onclick = () => socket.emit('dice:roll', { expr: $('#dice-expr').value }, (r) => { if (!r?.ok) alert(r?.error || 'Ошибка'); });

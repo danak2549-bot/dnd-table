@@ -1,3 +1,4 @@
+import { drawActors } from './actors.js';
 import { renderScene } from './scene-art.js';
 // Карта на canvas: фон, сетка, токены, масштаб и сдвиг (view = {s, x, y}).
 const bgCache = new Map();
@@ -40,7 +41,7 @@ export function clampView(view, W, H) {
   view.y = Math.min(0, Math.max(H - H * view.s, view.y));
 }
 
-export function drawMap(canvas, state, selId, view) {
+export function drawMap(canvas, state, selId, view, now = performance.now()) {
   const { w, h } = state.map;
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.clientWidth || 360;
@@ -63,29 +64,7 @@ export function drawMap(canvas, state, selId, view) {
   for (let i = 0; i <= w; i++) { g.beginPath(); g.moveTo(i * cell, 0); g.lineTo(i * cell, H); g.stroke(); }
   for (let j = 0; j <= h; j++) { g.beginPath(); g.moveTo(0, j * cell); g.lineTo(W, j * cell); g.stroke(); }
   if (state.scene) drawLabels(g, state.scene, cell, view);
-  for (const t of state.tokens) {
-    const cx = t.x * cell + cell / 2, cy = t.y * cell + cell / 2, r = cell * 0.42;
-    const dead = t.character?.dead || t.character?.hp?.cur === 0;
-    g.globalAlpha = t.hidden ? 0.4 : dead ? 0.5 : 1;
-    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2);
-    g.fillStyle = t.color || '#888'; g.fill();
-    g.lineWidth = (t.id === selId ? 3 : 1.5) / view.s;
-    g.strokeStyle = t.id === selId ? '#fff' : 'rgba(0,0,0,.7)'; g.stroke();
-    g.fillStyle = '#fff'; g.font = `600 ${cell * 0.5}px system-ui`;
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(dead ? '✕' : (t.name[0] || '?').toUpperCase(), cx, cy);
-    const c = t.character;
-    const pct = c?.hp ? (c.hp.max ? c.hp.cur / c.hp.max : 0) : (c?.hpPct ?? 0) / 100;
-    g.fillStyle = 'rgba(0,0,0,.7)'; g.fillRect(cx - r, cy + r + 1 / view.s, r * 2, cell * 0.12);
-    g.fillStyle = pct > 0.5 ? '#6fcf97' : pct > 0.25 ? '#ffd54f' : '#ff7a7a';
-    g.fillRect(cx - r, cy + r + 1 / view.s, r * 2 * Math.max(0, Math.min(1, pct)), cell * 0.12);
-    if (view.s >= 2.5) {
-      g.font = `600 ${cell * 0.38}px system-ui`; g.lineWidth = 3 / view.s;
-      g.strokeStyle = 'rgba(0,0,0,.85)'; g.strokeText(t.name, cx, cy - r - cell * 0.2);
-      g.fillStyle = '#fff'; g.fillText(t.name, cx, cy - r - cell * 0.2);
-    }
-    g.globalAlpha = 1;
-  }
+  drawActors(g, state, cell, view, selId, now);
   g.restore();
 }
 
@@ -98,4 +77,4 @@ export function cellFromEvent(canvas, state, e, view) {
     y: Math.max(0, Math.min(state.map.h - 1, Math.floor(wy / cell))),
   };
 }
-export const hitToken = (state, c) => [...state.tokens].reverse().find((t) => t.x === c.x && t.y === c.y) || null;
+export const hitToken = (state, c) => [...state.tokens].reverse().find((t) => t.x === c.x && t.y === c.y) || [...state.tokens].reverse().find((t) => t.x === c.x && t.y === c.y + 1) || null;
