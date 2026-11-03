@@ -259,7 +259,7 @@ function buildSceneRaw(spec) {
 }
 
 function freeCell(room) {
-  const taken = new Set(Object.values(room.tokens).filter((t) => !t.away && t.x >= 0).map((t) => t.x + ',' + t.y));
+  const taken = new Set(Object.values(room.tokens).filter((t) => !t.away && !t.benched && t.x >= 0).map((t) => t.x + ',' + t.y));
   const sp = room.scene ? room.scene.spawn : room.spawn || { x: 0, y: 0 };
   const D = dims(room);
   let best = null, bd = Infinity;
@@ -315,8 +315,8 @@ function openScene(room, spec) {
     if (t.type !== 'player') t.away = true;
   }
   room.scene = resolveScene(room, spec);
-  for (const t of Object.values(room.tokens)) if (t.type === 'player') { t.x = -99; t.y = -99; }
-  for (const t of Object.values(room.tokens)) if (t.type === 'player') Object.assign(t, freeCell(room));
+  for (const t of Object.values(room.tokens)) if (t.type === 'player' && !t.benched) { t.x = -99; t.y = -99; }
+  for (const t of Object.values(room.tokens)) if (t.type === 'player' && !t.benched) Object.assign(t, freeCell(room));
   populate(room);
 }
 function inferCulture(room) {
@@ -387,7 +387,7 @@ function walkableCell(room, x, y) {
   const c = sc.tiles[y][x];
   if (c !== '.' && c !== 'r') return false;
   if (sc.buildings.some((b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h)) return false;
-  return !Object.values(room.tokens).some((t) => !t.away && t.x === x && t.y === y);
+  return !Object.values(room.tokens).some((t) => !t.away && !t.benched && t.x === x && t.y === y);
 }
 function populate(room) {
   const prev = RNG;
@@ -485,7 +485,8 @@ function emitState(room) {
     const master = s.data.role === 'master';
     s.emit('state:sync', {
       map: room.scene ? { w: room.scene.w, h: room.scene.h, bg: '' } : room.map, scene: room.scene || null, location: room.location,
-      tokens: Object.values(room.tokens).filter((t) => !t.away && (master || !t.hidden)).map((t) => viewToken(t, s, room)),
+      tokens: Object.values(room.tokens).filter((t) => !t.away && !t.benched && (master || !t.hidden)).map((t) => viewToken(t, s, room)),
+      roster: master ? Object.values(room.tokens).filter((t) => t.type === 'player').map((t) => ({ id: t.id, name: t.name, race: t.character.race || '', user: (users[String(t.owner).slice(2)] || {}).name || '', benched: !!t.benched })) : undefined,
       quests: visibleQuests(room, s),
       myQuest: Object.values(room.tokens).find((t) => t.owner === s.data.pid)?.activeQuest || null,
       log: room.log.slice(-60),
@@ -538,7 +539,7 @@ async function askClaude(room, text) {
     карта: { ширина: dims(room).w, высота: dims(room).h },
     локация: room.location,
     задания: (room.quests || []).filter((q) => q.status === 'open').map((q) => q.title + ' (' + (q.place || 'мир') + ')'),
-    токены: Object.values(room.tokens).filter((t) => !t.away).map((t) => ({
+    токены: Object.values(room.tokens).filter((t) => !t.away && !t.benched).map((t) => ({
       имя: t.name, тип: t.type, x: t.x, y: t.y,
       хп: `${t.character.hp.cur}/${t.character.hp.max}`, мана: `${t.character.mana.cur}/${t.character.mana.max}`,
       раса: t.character.race, класс: t.character.class,
@@ -738,6 +739,8 @@ io.on('connection', (socket) => {
     if (r.owner === uid) { socket.data.role = 'master'; socket.data.pid = 'master'; }
     else {
       socket.data.role = 'player'; socket.data.pid = pid;
+      const back = Object.values(r.tokens).find((t) => t.owner === pid && t.benched);
+      if (back) { back.benched = false; Object.assign(back, freeCell(r)); log(r, `${back.name} возвращается в отряд`); }
       if (!Object.values(r.tokens).some((t) => t.owner === pid)) {
         const nm = String(name || '').trim().toLowerCase();
         const legacy = nm && Object.values(r.tokens).find((t) => t.type === 'player' && !String(t.owner).startsWith('u:') && t.name.toLowerCase() === nm);
@@ -820,6 +823,30 @@ io.on('connection', (socket) => {
     emitState(r);
   }));
 
+  socket.on('hero:bench', safe(({ id }, ack) => {
+    const r = room(); const t = r?.tokens[id];
+    if (!r || !master() || !t || t.type !== 'player') return ack({ ok: false });
+    t.benched = true;
+    log(r, `${t.name} покидает отряд`);
+    for (const [, sk] of io.sockets.sockets) if (sk.data.code === r.code && sk.data.pid === t.owner) { sk.data.code = null; sk.data.role = null; sk.leave?.(r.code); sk.emit('kicked', { message: 'Мастер убрал вашего героя «' + t.name + '» из игры. Когда вернётесь, он будет таким же: все данные сохранены.' }); }
+    ack({ ok: true });
+    emitState(r);
+  }));
+  socket.on('hero:restore', safe(({ id }, ack) => {
+    const r = room(); const t = r?.tokens[id];
+    if (!r || !master() || !t || !t.benched) return ack({ ok: false });
+    t.benched = false; Object.assign(t, freeCell(r));
+    log(r, `${t.name} возвращается в отряд`);
+    ack({ ok: true });
+    emitState(r);
+  }));
+  socket.on('hero:delete', safe(({ id }, ack) => {
+    const r = room(); const t = r?.tokens[id];
+    if (!r || !master() || !t || t.type !== 'player') return ack({ ok: false });
+    delete r.tokens[id];
+    ack({ ok: true });
+    emitState(r);
+  }));
   socket.on('quest:add', safe((d, ack) => {
     const r = room(); if (!r || !master()) return ack({ ok: false });
     r.quests.push({ id: 'q' + rid(8), title: str(d.title, 80) || 'Задание', description: str(d.description, 600), reward: str(d.reward, 80),

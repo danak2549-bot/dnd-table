@@ -116,6 +116,7 @@ function renderAll() {
   }
   renderLog(); redraw();
   quests.render(state);
+  renderHeroes();
   const mq = state.quests.find((q) => q.id === state.myQuest);
   $('#qbanner').hidden = !(me.role === 'player' && mq);
   if (mq) $('#qbanner').textContent = '★ Актуальное задание: ' + mq.title;
@@ -268,6 +269,29 @@ $('#dlg-take').onclick = () => {
 $('#dlg-say-go').onclick = () => { if (dlgTok && $('#dlg-say-in').value.trim()) { socket.emit('npc:say', { id: dlgTok.id, text: $('#dlg-say-in').value }, () => {}); $('#dlg-say-in').value = ''; $('#dialog').hidden = true; } };
 
 
+// ---------- герои (мастер) ----------
+function renderHeroes() {
+  const box = $('#heroes'); if (!box || me.role !== 'master') return;
+  box.textContent = '';
+  const mk = (t, fn, alt) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'sheet-btn small' + (alt ? ' alt' : ''); b.textContent = t; b.onclick = fn; return b; };
+  for (const h of state.roster || []) {
+    const row = document.createElement('div'); row.className = 'game-card';
+    const info = document.createElement('div'); info.className = 'g-info';
+    const b = document.createElement('b'); b.textContent = h.name;
+    info.append(b, document.createTextNode((h.race ? ' · ' + h.race : '') + (h.user ? ' · игрок ' + h.user : '') + (h.benched ? ' · в запасе' : '')));
+    const act = document.createElement('div'); act.className = 'q-actions';
+    if (h.benched) {
+      act.append(mk('Вернуть', () => socket.emit('hero:restore', { id: h.id }, () => {})),
+        mk('Удалить', () => { if (confirm('Удалить героя ' + h.name + ' навсегда вместе со статами?')) socket.emit('hero:delete', { id: h.id }, () => {}); }, true));
+    } else {
+      act.append(mk('Убрать', () => { if (confirm('Убрать героя ' + h.name + ' из игры? Статы сохранятся, он вернётся, когда игрок зайдёт снова.')) socket.emit('hero:bench', { id: h.id }, () => {}); }, true));
+    }
+    row.append(info, act); box.appendChild(row);
+  }
+  if (!box.children.length) { const d = document.createElement('div'); d.className = 'dim'; d.textContent = 'Героев пока нет.'; box.appendChild(d); }
+}
+socket.on('kicked', (d) => { me.role = null; me.code = ''; state = null; showLobby(); err(d && d.message); });
+
 // ---------- кубы ----------
 $('#dice-go').onclick = () => socket.emit('dice:roll', { expr: $('#dice-expr').value }, (r) => { if (!r?.ok) alert(r?.error || 'Ошибка'); });
 
@@ -310,5 +334,9 @@ $('#m-loc').onclick = () => socket.emit('location:set', { name: $('#m-locname').
 $('#m-leave').onclick = () => socket.emit('scene:close', {}, () => {});
 $('#m-world').onclick = () => socket.emit('map:set', { w: 40, h: 28, bg: '/world.jpg' }, () => {});
 $('#m-map').onclick = () => socket.emit('map:set', { w: +$('#m-w').value || state.map.w, h: +$('#m-h').value || state.map.h, bg: $('#m-bg').value }, () => {});
-$('#m-del').onclick = () => selId && confirm('Удалить токен?') && socket.emit('token:remove', { id: selId }, () => {});
+$('#m-del').onclick = () => {
+  const t = selected(); if (!t) return;
+  if (t.type === 'player') { if (confirm('Убрать героя ' + t.name + ' из игры? Статы сохранятся.')) socket.emit('hero:bench', { id: t.id }, () => {}); }
+  else if (confirm('Удалить токен?')) socket.emit('token:remove', { id: t.id }, () => {});
+};
 $('#m-hide').onclick = () => { const t = selected(); if (t) socket.emit('token:hide', { id: t.id, hidden: !t.hidden }, () => {}); };
