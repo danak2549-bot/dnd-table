@@ -134,8 +134,8 @@ const BUILD = {
   barracks: [5, 3], inn: [5, 3], well: [1, 1], house: [3, 3],
   library: [5, 4], healer: [4, 3], palace: [8, 6], hut: [2, 2], elder: [4, 3], board: [2, 1],
 };
-const CULT = { human: 'людей', elf: 'эльфов', dwarf: 'дварфов', halfling: 'полуросликов', orc: 'орков' };
-const CULT_RACE = { human: 'человек', elf: 'эльф', dwarf: 'дварф', halfling: 'полурослик', orc: 'орк' };
+const CULT = { human: 'людей', elf: 'эльфов', dwarf: 'дварфов', halfling: 'полуросликов', orc: 'орков', angel: 'ангелов', demon: 'демонов' };
+const CULT_RACE = { human: 'человек', elf: 'эльф', dwarf: 'дварф', halfling: 'полурослик', orc: 'орк', angel: 'аасимар', demon: 'демон' };
 // Детерминированный генератор: один и тот же город всегда получается одинаковым.
 const hashStr = (str) => { let h = 2166136261; for (const c of String(str)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
 const seeded = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
@@ -157,6 +157,8 @@ function bname(type, culture) {
   if (culture === 'elf') { if (type === 'temple') return 'Храм Лунного света'; if (type === 'library') return 'Хранилище свитков'; if (type === 'elder') return 'Дом хранителя'; if (type === 'palace') return 'Чертог'; }
   if (culture === 'dwarf') { if (type === 'temple') return 'Храм Горнила'; if (type === 'elder') return 'Дом тана'; if (type === 'palace') return 'Каменный чертог'; if (type === 'market') return 'Торговый зал'; }
   if (culture === 'halfling' && type === 'elder') return 'Дом бургомистра';
+  if (culture === 'angel') { if (type === 'temple') return 'Святилище'; if (type === 'elder') return 'Дом совета'; if (type === 'palace') return 'Небесный собор'; }
+  if (culture === 'demon') { if (type === 'temple') return 'Храм Бездны'; if (type === 'elder') return 'Дом наместника'; if (type === 'palace') return 'Чёрный собор'; if (type === 'smithy') return 'Адское горнило'; }
   if (culture === 'orc') { if (type === 'elder') return 'Шатёр вождя'; if (type === 'palace') return 'Твердыня вождя'; if (type === 'temple') return 'Капище'; if (type === 'smithy') return 'Кровавая кузня'; if (type === 'market') return 'Меновой двор'; if (type === 'library') return 'Хранилище трофеев'; }
   return BNAME[type] || 'Здание';
 }
@@ -278,13 +280,10 @@ function freeCell(room) {
 }
 
 const KNOWN = [
-  ['каменн', 'kamenny-grad'], ['марокко', 'kamenny-grad'], ['маунтайн', 'mountain'],
-  ['стальград', { name: 'Стальград', kind: 'capital', culture: 'human', walls: true, river: true, forest: false }],
-  ['траун', { name: 'Траун', kind: 'capital', culture: 'elf', walls: false, river: true, forest: true }],
-  ['лорнэйдар', { name: 'Лорнэйдар', kind: 'city', culture: 'elf', walls: false, river: false, forest: true }],
-  ['хоббитон', { name: 'Хоббитон', kind: 'capital', culture: 'halfling', walls: false, river: true, forest: false }],
-  ['мираж', { name: 'Хоббитон', kind: 'capital', culture: 'halfling', walls: false, river: true, forest: false }],
-  ['магор', { name: 'Магор', kind: 'capital', culture: 'orc', walls: true, river: false, forest: false }],
+  [/каменн\S* град|каменград|марокко/, 'kamenny-grad'], [/маунтайн/, 'mountain'],
+  [/стальград|аард/, 'stalgrad'], [/траун/, 'traun'], [/хоббитон|мираж/, 'hobbiton'], [/магор/, 'magor'],
+  [/(^| )(небесн\S*|рай|эдем)( |$)|ангел/, 'nebesny'], [/инферн\S*|преисподн\S*|(^| )ад( |$)|бездн\S*|демон/, 'infernum'],
+  [/лорнэйдар/, { name: 'Лорнэйдар', kind: 'city', culture: 'elf', walls: false, river: false, forest: true }],
 ];
 const normName = (n) => String(n || '').toLowerCase().replace(/ё/g, 'е').replace(/[^а-яa-z0-9 ]/g, '').trim();
 function fixedScene(p) {
@@ -296,7 +295,7 @@ function resolveScene(room, spec) {
   room.places = room.places || {};
   const n = normName(spec.name);
   for (const [k, v] of KNOWN) {
-    if (!n.includes(k)) continue;
+    if (!(typeof k === 'string' ? n.includes(k) : k.test(n))) continue;
     if (typeof v === 'string') return fixedScene(FIXED_PLACES[v]);
     spec = { ...spec, ...v }; break;
   }
@@ -333,6 +332,8 @@ const PERSON = {
   dwarf: ['Торин', 'Дарин', 'Брунгильда', 'Борин', 'Хельга', 'Грундир', 'Тордис', 'Балин'],
   halfling: ['Пиппин', 'Рози', 'Мерри', 'Лобелия', 'Сэмвис', 'Нола', 'Хэмфаст', 'Присцилла'],
   orc: ['Грош', 'Урзул', 'Мога', 'Зарга', 'Крул', 'Балаг', 'Шакра', 'Дроган'],
+  angel: ['Серафим', 'Рафаэль', 'Уриэль', 'Ариэла', 'Габриэль', 'Михаэль', 'Селеста', 'Азриэль'],
+  demon: ['Мефисто', 'Баал', 'Азазель', 'Лилит', 'Вельзевул', 'Мамон', 'Шаксар', 'Крогот'],
 };
 const ROLE = { smithy: 'кузнец', tavern: 'трактирщик', inn: 'хозяин постоялого двора', healer: 'знахарь', library: 'хранитель библиотеки', temple: 'жрец', elder: 'староста', market: 'торговец', palace: 'придворный', guild: 'глава гильдии', barracks: 'капитан стражи', shop: 'лавочник', alchemist: 'алхимик', farm: 'фермер', mill: 'мельник', stable: 'конюх', castle: 'кастелян' };
 const TALK = {
@@ -519,10 +520,10 @@ const TOOLS = [
     input_schema: obj({ title: { type: 'string' }, description: { type: 'string' },
       enemies: { type: 'array', items: obj({ name: { type: 'string' }, hp: { type: 'integer' },
         x: { type: 'integer' }, y: { type: 'integer' } }, ['name', 'hp', 'x', 'y']) } }, ['title', 'description', 'enemies']) },
-  { name: 'open_location', description: 'Открыть вид сверху на поселение. Сервер сам выберет и нарисует здания, жителей и доску объявлений по типу поселения: деревня маленькая и скромная, город и столица большие и богатые. НЕ перечисляй здания, если мастер не просил конкретные. Культура определяется по месту на карте, указывай её только если мастер назвал. Известные города рисуются всегда одинаково: Каменный Град (столица дварфов, королевство Марокко), Деревушка Маунтайн (дварфы), Стальград (столица людей, Аард), Траун и Лорнэйдар (эльфы), Хоббитон (столица полуросликов, Мираж), Магор (столица орков). Любой город, открытый один раз, запоминается и потом выглядит так же.',
+  { name: 'open_location', description: 'Открыть вид сверху на поселение. Сервер сам выберет и нарисует здания, жителей и доску объявлений по типу поселения: деревня маленькая и скромная, город и столица большие и богатые. НЕ перечисляй здания, если мастер не просил конкретные. Культура определяется по месту на карте, указывай её только если мастер назвал. Известные города рисуются всегда одинаково: Каменный Град (столица дварфов, королевство Марокко), Деревушка Маунтайн (дварфы), Стальград (столица людей, Аард), Траун (столица эльфов), Лорнэйдар (эльфы), Хоббитон (столица полуросликов, Мираж), Магор (столица орков), Небесный Град (столица ангелов), Инфернум (столица демонов). Любой город, открытый один раз, запоминается и потом выглядит так же.',
     input_schema: obj({
       name: { type: 'string' }, kind: { type: 'string', enum: ['village', 'town', 'city', 'capital', 'fort', 'port'] },
-      culture: { type: 'string', enum: ['human', 'elf', 'dwarf', 'halfling', 'orc'] }, description: { type: 'string' },
+      culture: { type: 'string', enum: ['human', 'elf', 'dwarf', 'halfling', 'orc', 'angel', 'demon'] }, description: { type: 'string' },
       walls: { type: 'boolean' }, river: { type: 'boolean' }, forest: { type: 'boolean' },
       buildings: { type: 'array', items: obj({ type: { type: 'string', enum: Object.keys(BUILD).filter((k) => k !== 'house' && k !== 'board') }, name: { type: 'string' } }, ['type', 'name']) },
     }, ['name', 'kind', 'description']) },

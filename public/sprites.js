@@ -51,10 +51,12 @@ const CULT_BODIES = {
   elf: ['белая роба', 'зелёная мантия', 'голубая роба', 'серебристая туника'],
   dwarf: ['кожаная куртка', 'кольчуга', 'коричневая туника', 'красная туника'],
   halfling: ['жёлтая рубаха', 'зелёный жилет', 'коричневая рубаха', 'красная рубаха'],
+  angel: ['белая роба', 'золотая мантия', 'белая туника'],
+  demon: ['чёрная роба', 'тёмная туника', 'стальные латы'],
   orc: ['коричневая рваная куртка', 'кожаная куртка', 'красная рубаха', 'стальные латы'],
   human: BODIES,
 };
-export const CULT_RACE = { human: 'человек', elf: 'эльф', dwarf: 'дварф', halfling: 'полурослик', orc: 'орк' };
+export const CULT_RACE = { human: 'человек', elf: 'эльф', dwarf: 'дварф', halfling: 'полурослик', orc: 'орк', angel: 'аасимар', demon: 'демон' };
 export function walkerLook(culture, i) {
   const bodies = CULT_BODIES[culture] || BODIES, h = hsh('w' + i + culture);
   const eq = { body: bodies[h % bodies.length], head: HEADS[(h >> 4) % HEADS.length], feet: (h >> 7) % 3 ? 'сапоги' : '' };

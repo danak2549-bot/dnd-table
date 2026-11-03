@@ -44,6 +44,8 @@ const THEMES = {
   human: { ground: '#7ea85c', road: '#cdb17c', roofs: ['#b5523a', '#8a5a3a', '#5f6b7a', '#c0763a', '#7a8f4e'], walls: ['#e6d8b8', '#d9c7a0', '#cdbb99', '#e8dfc9'], accent: null },
   elf: { ground: '#78b56e', road: '#e2dbbc', roofs: ['#4f9a7a', '#6fb08a', '#5f8ab0', '#8a6ab0'], walls: ['#f2ecdc', '#e6f0e2', '#efe6f4'], accent: '#6fb08a', curve: true, glow: true },
   dwarf: { ground: '#8e8c7a', road: '#9c9ca8', roofs: ['#4a4f5a', '#5a4a4a', '#3f4a5a'], walls: ['#8e8e98', '#7e7e88', '#9a9aa4'], accent: '#4a4f5a', stone: true },
+  angel: { ground: '#bcd9a0', road: '#efe6c8', roofs: ['#2f5fa8', '#d4a62a', '#5f8ad0'], walls: ['#f6f0e0', '#fbf6ea'], accent: '#d4a62a', glow: true },
+  demon: { ground: '#3a2a2f', road: '#55444e', roofs: ['#5a1a22', '#2a1a1a', '#7a2a22'], walls: ['#3a2a30', '#4a343a'], accent: '#8a1a22', rocks: true, stone: true },
   orc: { ground: '#a07c54', road: '#8a6a48', roofs: ['#6a3a2a', '#8a4a2a', '#4a2a1a', '#7a2a22'], walls: ['#8a6a4a', '#7a5a3a', '#9a7a5a'], accent: '#7a2a22', rocks: true, palisade: true },
   halfling: { ground: '#8cc460', road: '#d2b078', roofs: ['#d8b868', '#c9a75a', '#b89048'], walls: ['#efe0bc', '#e8d4a8'], accent: '#c9a75a', burrow: true },
 };
