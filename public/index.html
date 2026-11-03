@@ -10,20 +10,34 @@
 <body>
 <section id="login" class="login">
   <h1>Стол приключений</h1>
-  <p class="dim">Заходите по коду комнаты. Мастер создаёт комнату и делится кодом.</p>
-  <input id="l-name" class="sheet-input" placeholder="Имя героя" maxlength="40">
-  <input id="l-code" class="sheet-input" placeholder="Код комнаты" maxlength="8">
-  <button id="l-join" class="sheet-btn" type="button">Войти игроком</button>
-  <hr>
-  <button id="l-create" class="sheet-btn alt" type="button">Создать комнату (я мастер)</button>
-  <input id="l-key" class="sheet-input" placeholder="Ключ мастера, чтобы вернуться" >
-  <button id="l-master" class="sheet-btn alt" type="button">Войти мастером</button>
+  <div id="auth-box" class="stack">
+    <p class="dim">Войдите в аккаунт: ваши игры и персонажи сохраняются, пока вы снова не зайдёте.</p>
+    <input id="a-user" class="sheet-input" placeholder="Имя аккаунта" autocomplete="username" maxlength="24">
+    <input id="a-pass" class="sheet-input" type="password" placeholder="Пароль (от 6 символов)" autocomplete="current-password">
+    <button id="a-login" class="sheet-btn" type="button">Войти</button>
+    <button id="a-register" class="sheet-btn alt" type="button">Создать аккаунт</button>
+  </div>
+  <div id="lobby" class="stack" hidden>
+    <p class="dim">Аккаунт: <b id="lobby-user"></b> <button id="a-logout" class="sheet-btn alt small" type="button">Выйти</button></p>
+    <h3 class="sheet-h">Мои игры</h3>
+    <div id="my-games" class="stack"></div>
+    <h3 class="sheet-h">Новая игра</h3>
+    <button id="l-create" class="sheet-btn" type="button">Создать комнату (я мастер)</button>
+    <h3 class="sheet-h">Войти по коду</h3>
+    <input id="l-code" class="sheet-input" placeholder="Код комнаты" maxlength="8">
+    <input id="l-name" class="sheet-input" placeholder="Имя героя (для новой игры)" maxlength="40">
+    <button id="l-join" class="sheet-btn alt" type="button">Войти игроком</button>
+    <details class="manual"><summary>У меня старая комната с ключом мастера</summary>
+      <input id="l-key" class="sheet-input" placeholder="Ключ мастера">
+      <button id="l-master" class="sheet-btn alt" type="button">Привязать комнату к аккаунту (код выше)</button>
+    </details>
+  </div>
   <div id="l-err" class="err" role="alert"></div>
 </section>
 
 <main id="game" hidden>
   <header class="top">
-    <div><strong id="room-code"></strong> <span id="role" class="dim"></span></div>
+    <div><button id="menu" class="sheet-btn alt small" type="button" aria-label="В меню">☰</button> <strong id="room-code"></strong> <span id="role" class="dim"></span></div>
     <div id="loc" class="loc"></div>
   </header>
   <div id="qbanner" class="qbanner" hidden></div>
@@ -63,7 +77,7 @@
     <div id="log" class="log"></div>
   </section>
   <section id="p-master" class="panel" hidden>
-    <div class="keybox">Ключ мастера (сохраните): <code id="mkey"></code></div>
+    <div class="keybox">Комната привязана к вашему аккаунту. Код для игроков: <code id="mkey"></code></div>
     <div id="chat" class="chat"></div>
     <div id="proposal" class="proposal" hidden>
       <div id="prop-list"></div>

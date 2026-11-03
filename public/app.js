@@ -29,33 +29,67 @@ const sheet = mountSheet($('#sheet'), {
   getToken: () => selId,
 });
 
-// ---------- вход ----------
+// ---------- аккаунт и вход ----------
 const err = (t) => { $('#l-err').textContent = t || ''; };
-function enter(code, name, masterKey) {
-  socket.emit('room:join', { code, name, pid: me.pid, masterKey }, (r) => {
-    if (!r?.ok) return err(r?.error || 'Не удалось войти');
-    me.role = r.role; me.code = code.toUpperCase();
-    store.set('code', me.code); store.set('name', name || '');
+let authToken = store.get('auth');
+const showAuth = () => { $('#login').hidden = false; $('#game').hidden = true; $('#auth-box').hidden = false; $('#lobby').hidden = true; };
+function showLobby(user) {
+  me.user = user || me.user;
+  $('#login').hidden = false; $('#game').hidden = true; $('#auth-box').hidden = true; $('#lobby').hidden = false;
+  $('#lobby-user').textContent = me.user;
+  socket.emit('auth:rooms', {}, (r) => {
+    const box = $('#my-games'); box.textContent = '';
+    if (!r?.ok || !r.rooms.length) { const d = document.createElement('div'); d.className = 'dim'; d.textContent = 'Пока нет игр. Создайте комнату или войдите по коду.'; box.appendChild(d); return; }
+    for (const g of r.rooms) {
+      const card = document.createElement('div'); card.className = 'game-card';
+      const info = document.createElement('div'); info.className = 'g-info';
+      const b = document.createElement('b'); b.textContent = 'Комната ' + g.code;
+      info.append(b, document.createElement('br'), document.createTextNode((g.role === 'master' ? 'вы мастер' : 'герой: ' + g.name) + (g.place ? ' · ' + g.place : '')));
+      const go = document.createElement('button'); go.className = 'sheet-btn'; go.type = 'button'; go.textContent = 'Играть';
+      go.onclick = () => enter(g.code, g.name || '');
+      card.append(info, go); box.appendChild(card);
+    }
+  });
+}
+function afterConnect() {
+  if (!authToken) return showAuth();
+  socket.emit('auth:resume', { token: authToken }, (r) => {
+    if (!r?.ok) { authToken = ''; store.set('auth', ''); return showAuth(); }
+    me.user = r.user;
+    if (me.role && me.code) enter(me.code, store.get('name'), '', true); else showLobby(r.user);
+  });
+}
+function enter(code, name, masterKey, quiet) {
+  socket.emit('room:join', { code, name, masterKey }, (r) => {
+    if (!r?.ok) return quiet ? showLobby() : err(r?.error || 'Не удалось войти');
+    err('');
+    me.role = r.role; me.pid = r.pid; me.code = r.code;
+    store.set('name', name || '');
     $('#login').hidden = true; $('#game').hidden = false;
     $('#room-code').textContent = 'Комната ' + me.code;
     $('#role').textContent = me.role === 'master' ? 'мастер' : 'игрок';
     $('#tab-master').hidden = me.role !== 'master';
     $('#profile').hidden = me.role === 'master';
-    if (me.role === 'master') $('#mkey').textContent = masterKey;
+    $('#mkey').textContent = me.code;
   });
 }
+const doAuth = (ev) => {
+  const username = $('#a-user').value.trim(), password = $('#a-pass').value;
+  socket.emit(ev, { username, password }, (r) => {
+    if (!r?.ok) return err(r?.error || 'Не удалось войти');
+    err(''); authToken = r.token; store.set('auth', authToken); $('#a-pass').value = ''; showLobby(r.user);
+  });
+};
+$('#a-login').onclick = () => doAuth('auth:login');
+$('#a-register').onclick = () => doAuth('auth:register');
+$('#a-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') doAuth('auth:login'); });
+$('#a-logout').onclick = () => socket.emit('auth:logout', { token: authToken }, () => { authToken = ''; store.set('auth', ''); me.role = null; me.code = ''; showAuth(); });
+$('#menu').onclick = () => { me.role = null; me.code = ''; location.reload(); };
 $('#l-name').value = store.get('name');
 $('#l-code').value = store.get('code');
-$('#l-join').onclick = () => enter($('#l-code').value.trim(), $('#l-name').value.trim(), '');
-$('#l-create').onclick = () => socket.emit('room:create', {}, (r) => {
-  if (!r?.ok) return err('Не удалось создать комнату');
-  store.set('mk-' + r.code, r.masterKey);
-  enter(r.code, '', r.masterKey);
-});
-$('#l-master').onclick = () => {
-  const code = $('#l-code').value.trim().toUpperCase();
-  enter(code, '', $('#l-key').value.trim() || store.get('mk-' + code));
-};
+$('#l-join').onclick = () => { store.set('code', $('#l-code').value.trim()); enter($('#l-code').value.trim(), $('#l-name').value.trim(), ''); };
+$('#l-create').onclick = () => socket.emit('room:create', {}, (r) => { if (!r?.ok) return err(r?.error || 'Не удалось создать комнату'); enter(r.code, ''); });
+$('#l-master').onclick = () => enter($('#l-code').value.trim().toUpperCase(), '', $('#l-key').value.trim());
 
 // ---------- состояние ----------
 let lastScene = '';
@@ -67,7 +101,7 @@ socket.on('state:sync', (s) => {
   renderAll();
 });
 socket.on('disconnect', () => { err('Связь потеряна, переподключаюсь…'); });
-socket.on('connect', () => { if (me.role && me.code) enter(me.code, store.get('name'), me.role === 'master' ? store.get('mk-' + me.code) || $('#mkey').textContent : ''); });
+socket.on('connect', afterConnect);
 
 function renderAll() {
   $('#loc').textContent = state.location.name ? state.location.name + (state.location.description ? ' — ' + state.location.description : '') : '';

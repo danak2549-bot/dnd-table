@@ -5,9 +5,9 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { Server } from 'socket.io';
 import { FIXED_PLACES } from './places.js';
+import { loadAll, saveRoom, saveUsers, usingKV } from './store.js';
 
 const PORT = process.env.PORT || 3000;
-const FILE = process.env.DATA_FILE || './data.json';
 const MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-5-5';
 const KEY = process.env.ANTHROPIC_API_KEY;
 // Бесплатный вариант: ключ Groq (console.groq.com), без карты.
@@ -20,13 +20,38 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 // ---------- хранилище ----------
+const hashPw = (pw, salt) => crypto.scryptSync(pw, salt, 32).toString('hex');
+const sha = (v) => crypto.createHash('sha256').update(v).digest('hex');
+const failures = new Map();
 const rooms = new Map();
-try { for (const r of JSON.parse(fs.readFileSync(FILE, 'utf8'))) { r.quests = r.quests || []; rooms.set(r.code, r); } } catch {}
-let saveT;
-const save = () => {
-  clearTimeout(saveT);
-  saveT = setTimeout(() => fs.writeFile(FILE, JSON.stringify([...rooms.values()]), () => {}), 500);
+let users = {};
+{
+  const d = await loadAll();
+  users = d.users || {};
+  for (const r of d.rooms) { r.quests = r.quests || []; rooms.set(r.code, r); }
+  console.log(`Хранилище: ${usingKV ? 'Upstash Redis' : 'файл data.json'}; комнат: ${rooms.size}, аккаунтов: ${Object.keys(users).length}`);
+}
+const dirty = new Set();
+let usersDirty = false, saveT = null, saving = false;
+async function flush() {
+  if (saving) return;
+  saving = true;
+  try {
+    for (const code of [...dirty]) {
+      dirty.delete(code);
+      const r = rooms.get(code);
+      if (r) await saveRoom(r).catch((e) => { dirty.add(code); console.error('Не удалось сохранить комнату', code, e.message); });
+    }
+    if (usersDirty) { usersDirty = false; await saveUsers(users).catch((e) => { usersDirty = true; console.error('Не удалось сохранить аккаунты', e.message); }); }
+  } finally { saving = false; }
+  if (dirty.size || usersDirty) save();
+}
+const save = (room) => {
+  if (room) dirty.add(room.code);
+  if (!saveT) saveT = setTimeout(() => { saveT = null; flush(); }, 3000);
 };
+const saveUsersSoon = () => { usersDirty = true; save(); };
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, async () => { clearTimeout(saveT); saving = false; await flush(); process.exit(0); });
 
 // ---------- утилиты ----------
 const rid = (n = 6) => crypto.randomBytes(n).toString('hex').slice(0, n);
@@ -403,14 +428,15 @@ function closeScene(room) {
 const sceneNote = (room) => `Сейчас открыта локация «${room.scene.name}» (вид сверху), сетка ${room.scene.w}x${room.scene.h}, вход слева (${room.scene.spawn.x},${room.scene.spawn.y}). Здания (x,y левый верхний угол, ширина x высота): ` +
   room.scene.buildings.filter((b) => b.type !== 'house').map((b) => `${b.name || b.type} [${b.type}] (${b.x},${b.y}, ${b.w}x${b.h})`).join('; ') + '. Токены ставь на свободные клетки вне зданий. Чтобы вернуться на карту мира, вызови close_location. ';
 
-function createRoom() {
+function createRoom(owner) {
   const room = {
+    owner: owner || null,
     code: rid(5).toUpperCase(), masterKey: rid(16),
     map: { w: GRID_W, h: GRID_H, bg: '/world.jpg' }, spawn: { x: SPAWN.x, y: SPAWN.y },
     tokens: {}, quests: [], log: [], location: { name: 'Стальград', description: 'Столица Аарда. Отсюда начинается путь.' }, chat: [],
   };
   rooms.set(room.code, room);
-  save();
+  save(room);
   return room;
 }
 
@@ -453,7 +479,7 @@ function visibleQuests(room, s) {
     .map((q) => ({ id: q.id, title: q.title, description: q.description, reward: q.reward, giver: q.giver, place: q.place, onBoard: q.onBoard, status: q.status, taken: q.takenBy.includes(s.data.pid), takenBy: [] }));
 }
 function emitState(room) {
-  save();
+  save(room);
   for (const [, s] of io.sockets.sockets) {
     if (s.data.code !== room.code) continue;
     const master = s.data.role === 'master';
@@ -639,28 +665,88 @@ io.on('connection', (socket) => {
     try { fn(args[0] || {}, ack); } catch (e) { ack({ ok: false, error: e.message }); }
   };
 
-  socket.on('room:create', safe((_, ack) => {
-    const r = createRoom();
-    ack({ ok: true, code: r.code, masterKey: r.masterKey });
+  // ---------- аккаунты ----------
+  const need = (ack) => { if (!socket.data.uid) { ack({ ok: false, error: 'Войдите в аккаунт' }); return false; } return true; };
+  const startSession = (key) => {
+    const tok = key + '.' + crypto.randomBytes(24).toString('hex');
+    const u = users[key];
+    u.sessions = [...(u.sessions || []), sha(tok)].slice(-8);
+    saveUsersSoon();
+    socket.data.uid = key;
+    return tok;
+  };
+  socket.on('auth:register', safe(({ username, password }, ack) => {
+    const name = String(username || '').trim(), key = name.toLowerCase();
+    if (!/^[\p{L}\p{N}_-]{3,24}$/u.test(name)) return ack({ ok: false, error: 'Имя аккаунта: 3–24 символа, буквы, цифры, _ или -' });
+    if (String(password || '').length < 6 || String(password).length > 100) return ack({ ok: false, error: 'Пароль: минимум 6 символов' });
+    if (users[key]) return ack({ ok: false, error: 'Такое имя уже занято' });
+    const salt = rid(16);
+    users[key] = { name, salt, hash: hashPw(String(password), salt), sessions: [], created: Date.now() };
+    ack({ ok: true, token: startSession(key), user: name });
+  }));
+  socket.on('auth:login', safe(({ username, password }, ack) => {
+    const key = String(username || '').trim().toLowerCase(), fk = socket.handshake.address + '|' + key;
+    const f = failures.get(fk);
+    if (f && f.until > Date.now()) return ack({ ok: false, error: 'Слишком много попыток. Подождите несколько минут.' });
+    const u = users[key];
+    if (!u || hashPw(String(password || ''), u.salt) !== u.hash) {
+      const n = (f && f.n || 0) + 1;
+      failures.set(fk, { n, until: n >= 8 ? Date.now() + 5 * 60 * 1000 : 0 });
+      return ack({ ok: false, error: 'Неверное имя или пароль' });
+    }
+    failures.delete(fk);
+    ack({ ok: true, token: startSession(key), user: u.name });
+  }));
+  socket.on('auth:resume', safe(({ token }, ack) => {
+    const key = String(token || '').split('.')[0], u = users[key];
+    if (!u || !(u.sessions || []).includes(sha(String(token)))) return ack({ ok: false });
+    socket.data.uid = key;
+    ack({ ok: true, user: u.name });
+  }));
+  socket.on('auth:logout', safe(({ token }, ack) => {
+    const u = users[socket.data.uid];
+    if (u) { u.sessions = (u.sessions || []).filter((h) => h !== sha(String(token))); saveUsersSoon(); }
+    socket.data.uid = null; socket.data.code = null;
+    ack({ ok: true });
+  }));
+  socket.on('auth:rooms', safe((_, ack) => {
+    if (!need(ack)) return;
+    const uid = socket.data.uid, pid = 'u:' + uid, list = [];
+    for (const r of rooms.values()) {
+      if (r.owner === uid) list.push({ code: r.code, role: 'master', place: r.location?.name || '', players: Object.values(r.tokens).filter((t) => t.type === 'player').length });
+      else { const t = Object.values(r.tokens).find((x) => x.owner === pid); if (t) list.push({ code: r.code, role: 'player', name: t.name, place: r.location?.name || '' }); }
+    }
+    ack({ ok: true, rooms: list });
   }));
 
-  socket.on('room:join', safe(({ code, name, pid, masterKey }, ack) => {
+  socket.on('room:create', safe((_, ack) => {
+    if (!need(ack)) return;
+    const r = createRoom(socket.data.uid);
+    ack({ ok: true, code: r.code });
+  }));
+
+  socket.on('room:join', safe(({ code, name, masterKey }, ack) => {
+    if (!need(ack)) return;
     const r = rooms.get(String(code || '').toUpperCase());
     if (!r) return ack({ ok: false, error: 'Комната не найдена' });
-    socket.data.code = r.code;
+    const uid = socket.data.uid, pid = 'u:' + uid;
     if (masterKey) {
       if (masterKey !== r.masterKey) return ack({ ok: false, error: 'Неверный ключ мастера' });
-      socket.data.role = 'master'; socket.data.pid = 'master';
-    } else {
-      pid = str(pid, 40) || 'p' + rid(10);
+      r.owner = uid; save(r);
+    }
+    socket.data.code = r.code;
+    if (r.owner === uid) { socket.data.role = 'master'; socket.data.pid = 'master'; }
+    else {
       socket.data.role = 'player'; socket.data.pid = pid;
       if (!Object.values(r.tokens).some((t) => t.owner === pid)) {
-        const t = addToken(r, { name: name || 'Герой', type: 'player', owner: pid });
-        log(r, `${t.name} присоединяется к приключению`);
+        const nm = String(name || '').trim().toLowerCase();
+        const legacy = nm && Object.values(r.tokens).find((t) => t.type === 'player' && !String(t.owner).startsWith('u:') && t.name.toLowerCase() === nm);
+        if (legacy) legacy.owner = pid;
+        else { const t = addToken(r, { name: String(name || '').trim() || users[uid].name, type: 'player', owner: pid }); log(r, `${t.name} присоединяется к приключению`); }
       }
     }
     socket.join(r.code);
-    ack({ ok: true, role: socket.data.role, pid: socket.data.pid });
+    ack({ ok: true, role: socket.data.role, pid: socket.data.pid, code: r.code });
     emitState(r);
   }));
 
