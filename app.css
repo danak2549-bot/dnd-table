@@ -1,0 +1,385 @@
+:root { --sheet-bg:#1e1f26; --sheet-panel:#2b2d38; --sheet-panel2:#353848; --sheet-accent:#3d5afe; --sheet-text:#e8e9f0; --sheet-dim:#9a9db0; --bg:#17181f; --panel:#2b2d38; --acc:#3d5afe; --txt:#e8e9f0; --dim:#9a9db0; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--txt); font:16px/1.4 system-ui, sans-serif; }
+[hidden] { display:none !important; }
+.dim { color:var(--dim); }
+.login { max-width:420px; margin:0 auto; padding:24px 16px; display:flex; flex-direction:column; gap:10px; }
+.login h1 { margin:0; font-size:26px; }
+.err { color:#ff7a7a; min-height:20px; }
+.sheet-btn.alt { background:var(--panel); border:1px solid #454860; }
+.top { display:flex; justify-content:space-between; gap:8px; padding:8px 12px; background:var(--panel); }
+.loc { font-size:14px; color:var(--dim); text-align:right; }
+.mapwrap { padding:8px; position:relative; }
+.zoom { position:absolute; right:14px; top:14px; display:flex; flex-direction:column; gap:6px; }
+.zoom button { width:40px; height:40px; border:0; border-radius:10px; background:rgba(20,22,30,.82); color:#fff; font-size:20px; }
+#map { width:100%; display:block; border-radius:10px; touch-action:none; background:#101117; }
+.tabs { display:flex; gap:4px; padding:0 8px; }
+.tabs button { flex:1; min-height:42px; border:0; border-radius:8px 8px 0 0; background:var(--panel); color:var(--dim); font:inherit; }
+.tabs button.on { background:var(--acc); color:#fff; }
+.panel { padding:8px; max-width:760px; margin:0 auto; }
+.profile { display:grid; grid-template-columns:1fr 1fr 70px; gap:6px; margin-bottom:8px; }
+.dice, .row { display:flex; gap:6px; margin:6px 0; }
+.log { display:flex; flex-direction:column; gap:6px; }
+.log div { background:var(--panel); border-radius:8px; padding:8px 10px; font-size:15px; overflow-wrap:anywhere; }
+.log .story { border-left:3px solid #ffd54f; }
+.log .dice { border-left:3px solid var(--acc); }
+.chat { display:flex; flex-direction:column; gap:6px; max-height:40vh; overflow:auto; margin-bottom:8px; }
+.chat div { padding:8px 10px; border-radius:8px; background:var(--panel); overflow-wrap:anywhere; white-space:pre-wrap; }
+.chat .me { background:#25306b; }
+.proposal { background:var(--panel); border:1px solid var(--acc); border-radius:10px; padding:10px; margin-bottom:8px; display:flex; flex-direction:column; gap:6px; }
+.keybox { font-size:13px; color:var(--dim); margin-bottom:8px; overflow-wrap:anywhere; }
+.manual { margin-top:12px; display:flex; flex-direction:column; gap:6px; }
+.manual > * { margin-top:6px; }
+#ai-send { margin-top:6px; width:100%; }
+
+.avatar { display:flex; gap:12px; align-items:center; background:var(--panel); border-radius:12px; padding:10px; margin-bottom:10px; }
+.av-svg { flex:none; width:130px; }
+.av-svg svg { width:100%; height:auto; display:block; }
+.av-list { margin:0; padding:0; list-style:none; font-size:14px; display:flex; flex-direction:column; gap:4px; overflow-wrap:anywhere; }
+.inv-list { display:flex; flex-direction:column; gap:8px; margin-bottom:8px; }
+.inv-row { display:flex; flex-wrap:wrap; gap:6px; background:var(--panel); border-radius:10px; padding:8px; align-items:center; }
+.inv-name { flex:1 1 100%; }
+.inv-qty { width:70px; flex:none; }
+.inv-slot { flex:1 1 120px; min-width:0; }
+.inv-wear { flex:none; }
+
+.qbanner { background:#3a3320; color:#ffe9a8; padding:6px 12px; font-size:14px; cursor:pointer; border-bottom:1px solid #6a5a2a; }
+.q-form { display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
+.q-list { display:flex; flex-direction:column; gap:8px; }
+.q-card { background:var(--panel); border-radius:10px; padding:10px; display:flex; flex-direction:column; gap:6px; border-left:4px solid #d4a62a; }
+.q-card.done { opacity:.55; border-left-color:#6fcf97; }
+.q-title { font-weight:700; }
+.q-desc { font-size:15px; overflow-wrap:anywhere; }
+.q-meta { font-size:13px; color:var(--dim); }
+.q-actions { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.q-pin { color:#ffd54a; font-weight:600; }
+.dialog { position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:flex-end; justify-content:center; z-index:50; padding:10px; }
+.dlg-card { background:#2b2d38; border:1px solid #6a5a2a; border-radius:14px; width:100%; max-width:520px; padding:14px; display:flex; flex-direction:column; gap:10px; }
+.dlg-text { font-size:17px; line-height:1.4; overflow-wrap:anywhere; }
+
+.stack { display:flex; flex-direction:column; gap:10px; }
+.sheet-btn.small { min-height:32px; padding:2px 10px; font-size:14px; }
+.game-card { background:var(--panel); border-radius:10px; padding:10px; display:flex; gap:10px; align-items:center; justify-content:space-between; }
+.game-card .g-info { flex:1; min-width:0; overflow-wrap:anywhere; }
+
+
+/* Магазины */
+.shop-modal{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:14px}
+.shop-modal[hidden]{display:none}
+.shop-panel{width:min(980px,100%);max-height:min(92vh,900px);overflow:auto;background:var(--panel,#171717);color:var(--txt,#f2f2f2);border:1px solid var(--acc,#8d7445);border-radius:16px;padding:16px;box-shadow:0 20px 80px #000b}
+.shop-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:1px solid #ffffff20;padding-bottom:12px}
+.shop-title{margin:0 0 4px;font-size:1.35rem}
+.shop-sub,.shop-gold{color:var(--dim,#aaa);font-size:.9rem;margin-top:3px}
+.shop-gold{color:var(--acc,#d5b36b);font-weight:700}
+.shop-toolbar{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:12px 0}
+.shop-search{flex:1;min-width:180px}
+.shop-status{min-height:20px;color:var(--acc,#d5b36b);font-size:.9rem;margin:5px 0}
+.shop-body{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:10px}
+.shop-item{border:1px solid #ffffff22;border-radius:12px;padding:12px;background:var(--sheet-panel,#202020);min-width:0}
+.shop-item-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.shop-item-name{line-height:1.3}
+.shop-price{white-space:nowrap;color:var(--acc,#d5b36b);font-weight:800}
+.shop-item-meta,.shop-stock{font-size:.8rem;color:var(--dim,#aaa);margin-top:7px}
+.shop-item-desc{font-size:.9rem;line-height:1.4;margin:8px 0}
+.shop-item-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px}
+.shop-buy{white-space:nowrap}
+.shop-empty{grid-column:1/-1;padding:20px;text-align:center;color:var(--dim,#aaa)}
+.shop-admin{display:grid;grid-template-columns:auto minmax(50px,1fr) auto minmax(50px,1fr) auto minmax(50px,1fr) auto;gap:5px;align-items:center;margin-top:10px}
+.shop-admin label{font-size:.75rem;color:var(--dim,#aaa)}
+.shop-admin-num{min-width:0;width:100%;padding:7px}
+.shop-chat{border-top:1px solid #ffffff20;margin-top:16px;padding-top:10px}
+.shop-chat-log{display:flex;flex-direction:column;gap:6px;max-height:160px;overflow:auto;padding:8px;background:#0002;border-radius:8px}
+.shop-chat-line{padding:7px 9px;border-radius:8px;background:#ffffff0d;font-size:.88rem;white-space:pre-wrap}
+.shop-chat-line.player{align-self:flex-end;background:#8d744522}
+.shop-chat-compose{display:flex;gap:8px;margin-top:8px}
+.shop-chat-input{flex:1;min-width:0}
+@media(max-width:560px){.shop-panel{padding:11px}.shop-toolbar .sheet-btn{flex:1}.shop-admin{grid-template-columns:1fr 1fr}.shop-chat-compose{flex-direction:column}.shop-chat-send{width:100%}}
+
+
+.shop-custom-form{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:12px;margin-bottom:10px;border:1px dashed #ffffff44;border-radius:10px}
+.shop-custom-form strong,.shop-custom-form textarea,.shop-custom-form button{grid-column:1/-1}
+.shop-custom-form textarea{resize:vertical}
+@media(max-width:560px){.shop-custom-form{grid-template-columns:1fr}}
+
+
+/* ===== Единая аниме-сцена для всех магазинов =====
+   Эти стили включаются классом shop-scene-mode на .shop-modal.
+   Каталог скрывается только внутри режима сцены, чтобы не ломать
+   старый интерфейс до подключения новой логики в shop.js. */
+.shop-modal.shop-scene-mode {
+  background:
+    radial-gradient(ellipse at 50% 35%, rgba(95,68,43,.22), transparent 58%),
+    rgba(5,6,10,.94);
+  padding: 0;
+  backdrop-filter: blur(7px);
+}
+.shop-scene-mode .shop-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(1180px, 100%);
+  height: min(94vh, 940px);
+  max-height: 94vh;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid rgba(214,177,112,.48);
+  border-radius: 18px;
+  background: #111116;
+  box-shadow: 0 24px 90px #000e, inset 0 0 50px #d6a45a0a;
+}
+.shop-scene-mode .shop-header {
+  position: relative;
+  z-index: 4;
+  flex: none;
+  padding: 13px 18px;
+  background: linear-gradient(180deg, #211d1a, #151419);
+  border-bottom: 1px solid rgba(214,177,112,.28);
+}
+.shop-scene-mode .shop-title {
+  color: #f4e7d0;
+  letter-spacing: .03em;
+  text-shadow: 0 2px 12px #000;
+}
+.shop-scene-mode .shop-sub { color: #c2b6a5; }
+.shop-scene-mode .shop-gold { color: #e6bd72; }
+
+/* Пространство сцены и фон конкретной лавки */
+.shop-scene {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 300px;
+  overflow: hidden;
+  padding: clamp(12px, 3vw, 30px);
+  background:
+    linear-gradient(180deg, rgba(7,8,12,.06) 0%, rgba(7,8,12,.12) 45%, rgba(7,8,12,.78) 100%),
+    radial-gradient(ellipse at 50% 62%, rgba(194,126,59,.2), transparent 45%),
+    linear-gradient(135deg, #30251f 0%, #17171c 48%, #28201b 100%);
+}
+.shop-scene::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  opacity: .5;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 11%, #0002 11.2% 11.5%, transparent 11.8% 22%),
+    linear-gradient(0deg, #0008, transparent 38%);
+}
+.shop-scene[data-shop-type="blacksmith"],
+.shop-scene[data-shop-type="smithy"] {
+  background:
+    radial-gradient(ellipse at 50% 52%, #e8792940, transparent 35%),
+    linear-gradient(180deg, #211a19, #4b2b20 58%, #171316);
+}
+.shop-scene[data-shop-type="library"] {
+  background:
+    radial-gradient(ellipse at 50% 35%, #c49a4a24, transparent 42%),
+    linear-gradient(180deg, #28241e, #45331f 55%, #171419);
+}
+.shop-scene[data-shop-type="armorer"] {
+  background:
+    radial-gradient(ellipse at 50% 48%, #9da9b52b, transparent 40%),
+    linear-gradient(180deg, #20232a, #34343a 58%, #17171d);
+}
+.shop-scene[data-shop-type="alchemy"],
+.shop-scene[data-shop-type="potion"] {
+  background:
+    radial-gradient(ellipse at 50% 48%, #48b98b2c, transparent 38%),
+    linear-gradient(180deg, #172823, #253b31 58%, #14191a);
+}
+
+/* Реплика продавца — облако над персонажем */
+.shop-speech {
+  position: relative;
+  z-index: 5;
+  align-self: center;
+  width: min(720px, 94%);
+  margin: 0 auto auto;
+  padding: 13px 18px;
+  color: #282019;
+  background: linear-gradient(145deg, #fff9ed, #e9dcc6);
+  border: 1px solid #fff2d7;
+  border-radius: 18px;
+  box-shadow: 0 8px 30px #0008, inset 0 1px #fff;
+  font-size: clamp(14px, 1.8vw, 18px);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.shop-speech::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  width: 18px;
+  height: 18px;
+  background: #e9dcc6;
+  border-right: 1px solid #fff2d7;
+  border-bottom: 1px solid #fff2d7;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+/* Персонаж: сюда shop.js подставит детализированный арт NPC */
+.shop-merchant-stage {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-height: 190px;
+  margin: 12px auto 0;
+  width: min(760px, 100%);
+}
+.shop-merchant-art {
+  display: block;
+  max-width: min(68vw, 520px);
+  max-height: min(48vh, 500px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 16px 22px #000b);
+  transform-origin: 50% 95%;
+}
+.shop-merchant-art.is-speaking {
+  animation: shop-merchant-breathe 3.2s ease-in-out infinite;
+}
+@keyframes shop-merchant-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-3px) scale(1.006); }
+}
+
+/* Прилавок перекрывает нижнюю часть персонажа */
+.shop-counter {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  min-height: 62px;
+  margin: -12px -30px calc(-1 * clamp(12px, 3vw, 30px));
+  border-top: 3px solid #b8874e;
+  background:
+    linear-gradient(180deg, #9b6638 0, #57351f 12px, #382319 100%);
+  box-shadow: 0 -9px 24px #0007, inset 0 2px 5px #f4c58b55;
+}
+.shop-counter::after {
+  content: "";
+  display: block;
+  height: 9px;
+  margin-top: 12px;
+  background: repeating-linear-gradient(90deg, #211711 0 3px, #71462b 3px 7px);
+  opacity: .55;
+}
+
+/* Предмет, который продавец демонстрирует игроку */
+.shop-showcase {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  bottom: clamp(66px, 12vh, 120px);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: min(560px, 92%);
+  padding: 12px;
+  color: #f8f0e4;
+  border: 1px solid #d7ad6b99;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #211b18ed, #0d0e13f2);
+  box-shadow: 0 14px 45px #000b, 0 0 24px #d69b4a20;
+  transform: translateX(-50%);
+  animation: shop-item-reveal .45s cubic-bezier(.2,.8,.2,1) both;
+}
+.shop-showcase[hidden] { display: none !important; }
+.shop-showcase-art {
+  flex: 0 0 112px;
+  width: 112px;
+  height: 112px;
+  object-fit: contain;
+  filter: drop-shadow(0 5px 12px #000a);
+}
+.shop-showcase-info { min-width: 0; flex: 1; }
+.shop-showcase-name { font-weight: 800; font-size: 1.05rem; color: #f4d49c; }
+.shop-showcase-description { margin-top: 5px; color: #d6cbbb; font-size: .88rem; line-height: 1.4; }
+.shop-showcase-price { margin-top: 7px; color: #f0c36f; font-weight: 800; }
+.shop-showcase-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+@keyframes shop-item-reveal {
+  from { opacity: 0; transform: translate(-50%, 18px) scale(.94); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+/* В режиме сцены каталог скрыт до запроса игрока */
+.shop-scene-mode .shop-toolbar,
+.shop-scene-mode .shop-body { display: none; }
+.shop-scene-mode .shop-toolbar.is-visible,
+.shop-scene-mode .shop-body.is-visible { display: flex; }
+.shop-scene-mode .shop-body.is-visible { display: grid; }
+
+/* Внизу остаётся только строка общения */
+.shop-scene-mode .shop-chat {
+  position: relative;
+  z-index: 8;
+  flex: none;
+  margin: 0;
+  padding: 10px 14px max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid #d6b17655;
+  background: linear-gradient(180deg, #1b191b, #100f13);
+}
+.shop-scene-mode .shop-chat-log { display: none; }
+.shop-scene-mode .shop-chat-compose {
+  max-width: 900px;
+  margin: 0 auto;
+  align-items: stretch;
+}
+.shop-scene-mode .shop-chat-input {
+  min-height: 46px;
+  padding: 10px 14px;
+  color: #f7eee1;
+  background: #29252a;
+  border: 1px solid #8f704c;
+  border-radius: 12px;
+  font: inherit;
+}
+.shop-scene-mode .shop-chat-input:focus {
+  outline: 2px solid #d4a76a;
+  outline-offset: 1px;
+}
+.shop-scene-mode .shop-chat-send {
+  min-width: 104px;
+  border-radius: 12px;
+}
+.shop-scene-mode .shop-status { padding: 0 14px; }
+
+/* Адаптация под телефоны */
+@media (max-width: 600px) {
+  .shop-scene-mode { padding: 0; }
+  .shop-scene-mode .shop-panel {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+  .shop-scene-mode .shop-header { padding: 10px 12px; }
+  .shop-scene { min-height: 0; padding: 12px 10px 20px; }
+  .shop-speech { width: 96%; padding: 11px 13px; }
+  .shop-merchant-stage { min-height: 150px; }
+  .shop-merchant-art { max-width: 88vw; max-height: 42vh; }
+  .shop-counter { margin-left: -10px; margin-right: -10px; }
+  .shop-showcase {
+    bottom: 72px;
+    gap: 9px;
+    padding: 9px;
+  }
+  .shop-showcase-art { flex-basis: 82px; width: 82px; height: 82px; }
+  .shop-showcase-name { font-size: .95rem; }
+  .shop-showcase-description { font-size: .8rem; }
+  .shop-scene-mode .shop-chat-compose { gap: 6px; }
+  .shop-scene-mode .shop-chat-send { min-width: 74px; }
+}
