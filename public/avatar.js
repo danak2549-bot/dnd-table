@@ -33,7 +33,7 @@ export function guessSlot(name) {
 const SKIN = '#e8b890';
 const HAIR = ['#3a2a1a', '#6a4a2a', '#c9a050', '#222222', '#8a3a1a'];
 
-function weaponSvg(text, tx, ty, mirror) {
+export function weaponSvg(text, tx, ty, mirror) {
   const t = text.toLowerCase();
   const blade = colorOf(t, '#cfd5dd');
   let inner;
@@ -51,7 +51,7 @@ function weaponSvg(text, tx, ty, mirror) {
   return `<g transform="translate(${tx} ${ty})${mirror ? ' scale(-1 1)' : ''}">${inner}</g>`;
 }
 
-function shieldSvg(text) {
+export function shieldSvg(text) {
   const t = text.toLowerCase(), col = colorOf(t, '#8a5a2a');
   const kite = has(/башен|геральд|рыцарск/, t);
   const shape = kite
@@ -129,6 +129,20 @@ function build(eq, name, race, phase = 0) {
   return s + rf.top;
 }
 
+export function headSvg(headText) {
+  const head = String(headText || '').toLowerCase();
+  if (!head) return '';
+  let s = '';
+    const hcn = (() => { for (const [re, c] of COLORS) if (re.test(head)) return c; return null; })();
+    if (has(/корон|венец|диадем/, head)) s += `<path d="M77 42 L82 20 L91 35 L100 15 L109 35 L118 20 L123 42Z" fill="${colorOf(head, '#d4a62a')}" stroke="#8a6a1a" stroke-width="2"/><circle cx="100" cy="30" r="3.5" fill="#c0392b"/><circle cx="86" cy="36" r="2.5" fill="#3b5fb0"/><circle cx="114" cy="36" r="2.5" fill="#3f8a4a"/>`;
+    else if (has(/шлем|каск|шишак/, head)) s += `<path d="M74 62 Q72 26 100 26 Q128 26 126 62 L119 62 L119 52 L81 52 L81 62Z" fill="${colorOf(head, '#aeb6c2')}" stroke="#4a4f58" stroke-width="2.5"/><rect x="97.5" y="50" width="5" height="20" fill="${colorOf(head, '#aeb6c2')}" stroke="#4a4f58" stroke-width="1.5"/><path d="M100 26 Q100 10 112 14 Q104 18 104 28Z" fill="#b3302e"/>`;
+    else if (has(/капюшон/, head)) s += `<path d="M70 74 Q68 24 100 22 Q132 24 130 74 Q120 50 100 50 Q80 50 70 74Z" fill="${hcn || '#3a3a46'}" stroke="#000" stroke-opacity=".4" stroke-width="2"/>`;
+    else if (has(/шляп|колпак|тюрбан|берет/, head)) s += `<ellipse cx="100" cy="44" rx="40" ry="9" fill="${hcn || '#5a3d6a'}" stroke="#000" stroke-opacity=".35" stroke-width="2"/><path d="M79 44 Q100 -10 121 44Z" fill="${hcn || '#5a3d6a'}" stroke="#000" stroke-opacity=".35" stroke-width="2"/>`;
+    else s += `<path d="M76 52 Q100 22 124 52Z" fill="${hcn || '#7a5230'}" stroke="#000" stroke-opacity=".35" stroke-width="2"/><rect x="76" y="48" width="48" height="7" rx="3" fill="#000" fill-opacity=".2"/>`;
+  return s;
+}
+
+
 export function heroInner({ name, race, equipment, weapons, phase = 0 }) {
   const eq = { ...(equipment || {}) };
   const fallbackW = Array.isArray(weapons) && weapons[0] ? weapons[0].name : '';
@@ -145,6 +159,7 @@ export function renderAvatar(box, token) {
   const c = token && token.character;
   if (!c || !c.equipment || typeof c.equipment !== 'object') { box.hidden = true; return; }
   const { inner, weapon, eq } = heroInner({ name: token.name, race: c.race, equipment: c.equipment, weapons: c.weapons });
+  box.querySelector('.av-svg').style.width = '';
   box.querySelector('.av-svg').innerHTML = `<svg viewBox="0 -20 200 310" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Персонаж"><ellipse cx="100" cy="276" rx="60" ry="9" fill="#000" opacity=".25"/>${inner}</svg>`;
   const ul = box.querySelector('.av-list'); ul.textContent = '';
   for (const [k, label] of Object.entries(SLOT_NAMES)) {

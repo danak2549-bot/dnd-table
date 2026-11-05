@@ -1,5 +1,6 @@
 // Спрайты: SVG-рисунки героев, жителей и монстров, превращённые в картинки и закэшированные.
 import { heroInner } from './avatar.js';
+import { photoId, composeHero } from './photo.js';
 import { creatureArt } from './creatures.js';
 
 const cache = new Map();
@@ -77,7 +78,21 @@ export function lookOfToken(t) {
   if (a.hero) return { key: `m|${t.name}`, hero: { name: t.name, race: a.hero.race, equipment: a.hero.eq, weapons: [] }, scale: a.scale };
   return { key: `m|${t.name}`, draw: a.draw, scale: a.scale };
 }
+const photoSpriteCache = new Map();
 export function spriteFor(look, phase) {
   const ph = look.hero || look.draw ? phase : 0;
+  if (look.hero) {
+    const id = photoId(look.hero.race);
+    if (id) {
+      const eq = look.hero.equipment || {};
+      const weapon = eq.weapon || (Array.isArray(look.hero.weapons) && look.hero.weapons[0] ? look.hero.weapons[0].name : '');
+      const key = `${look.key}|photo|${id}|${JSON.stringify(eq)}|${weapon}|${ph}`;
+      if (!photoSpriteCache.has(key)) {
+        if (photoSpriteCache.size > 90) photoSpriteCache.delete(photoSpriteCache.keys().next().value);
+        photoSpriteCache.set(key, composeHero({ id, eq, weapon }, ph, 496, onLoad));
+      }
+      return photoSpriteCache.get(key);
+    }
+  }
   return imageFor(look.key + '|' + ph, () => (look.hero ? heroInner({ ...look.hero, phase: ph }).inner : look.draw(ph)));
 }

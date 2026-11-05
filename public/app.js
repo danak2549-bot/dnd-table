@@ -1,6 +1,7 @@
 import { mountSheet } from './sheet.js';
 import { mountShop } from './shop.js';
 import { renderAvatar } from './avatar.js';
+import { renderPhotoAvatar } from './photo.js';
 import { mountInventory } from './inventory.js';
 import { mountQuests } from './quests.js';
 import { setSpriteLoadHandler } from './sprites.js';
@@ -108,7 +109,7 @@ socket.on('connect', afterConnect);
 function renderAll() {
   $('#loc').textContent = state.location.name ? state.location.name + (state.location.description ? ' — ' + state.location.description : '') : '';
   sheet.render(selected());
-  renderAvatar($('#avatar'), selected());
+  if (!renderPhotoAvatar($('#avatar'), selected())) renderAvatar($('#avatar'), selected());
   inv.render(selected());
   const t = ownToken();
   if (t && me.role !== 'master' && t.character.race !== undefined) {
