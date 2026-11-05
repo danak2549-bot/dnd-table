@@ -127,7 +127,6 @@ export function mountShop(root, { socket } = {}) {
     data = payload; buildingIndex = index; filter = payload.category === 'all' ? 'all' : payload.category === 'armor' ? 'armor' : payload.category;
     query = ''; search.value = ''; status.textContent = ''; chatLog.textContent = '';
     renderHeader();
-    adminPanel.hidden = !payload.isMaster;
     for (const b of root.querySelectorAll('[data-filter]')) {
       const key = b.dataset.filter;
       b.hidden = payload.category === 'all' ? false : key !== payload.category;
