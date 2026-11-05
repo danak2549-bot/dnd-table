@@ -20,162 +20,72 @@ export function mountShop(root, { socket } = {}) {
   const chatInput = root.querySelector('.shop-chat-input');
   const chatSend = root.querySelector('.shop-chat-send');
 
-  // Сцена размещается отдельно от каталога: у обычного игрока каталог скрыт.
-  let scene = null;
-  let currentShowcase = null;
+  // Сцена с отдельным нарисованным портретом торговца.
+  function ensureMerchantStyles() {
+    if (document.getElementById('shop-merchant-scene-styles')) return;
+    const style = el('style');
+    style.id = 'shop-merchant-scene-styles';
+    style.textContent = `
+      .shop-merchant-scene{position:relative;isolation:isolate;min-height:390px;margin:0 0 16px;overflow:hidden;border:1px solid #806744;border-radius:14px;background:radial-gradient(ellipse at 50% 20%,#594332 0%,#29201b 58%,#100e0d 100%);color:#f4e7ce;text-align:center}
+      .shop-merchant-scene-head{position:relative;z-index:3;padding:12px 10px 7px;text-shadow:0 2px 5px #000;font-weight:800;font-size:18px;background:linear-gradient(180deg,#100d0bd9,#100d0b00)}
+      .shop-merchant-scene-role{display:block;margin-top:3px;font-size:12px;font-weight:400;color:#ddc6a3}
+      .shop-merchant-stage{height:320px;position:relative;display:flex;justify-content:center;align-items:flex-end;overflow:hidden}
+      .shop-merchant-art{display:block;width:min(100%,430px);height:100%;object-fit:cover;object-position:center 35%;filter:drop-shadow(0 8px 10px #0009)}
+      .shop-merchant-counter{position:absolute;z-index:4;bottom:0;left:0;right:0;height:43px;border-top:5px solid #c49a5d;background:repeating-linear-gradient(90deg,#694326 0 38px,#795332 39px 42px);box-shadow:0 -5px 15px #0008}
+      .shop-merchant-counter:after{content:"";position:absolute;left:0;right:0;bottom:7px;height:3px;background:#3a2418}
+      .shop-merchant-description{position:relative;z-index:5;margin:0;padding:9px 12px 12px;background:#100d0bd9;font-size:12px;color:#e4d3b7}
+      @media(max-width:600px){.shop-merchant-scene{min-height:330px}.shop-merchant-stage{height:270px}.shop-merchant-art{width:100%;object-fit:contain}}
+    `;
+    document.head.appendChild(style);
+  }
 
-  function ensureMerchantScene() {
-    if (scene && scene.isConnected) return scene;
-    const panel = root.querySelector('.shop-panel') || root;
-    scene = el('section', 'shop-scene');
-    scene.setAttribute('aria-label', 'Сцена магазина и торговец');
-
-    const speech = el('div', 'shop-speech', '');
-    speech.setAttribute('aria-live', 'polite');
-    speech.setAttribute('role', 'status');
-
-    const stage = el('div', 'shop-merchant-stage');
-    const portrait = el('img', 'shop-merchant-art');
-    portrait.alt = 'Портрет продавца';
-    portrait.loading = 'eager';
-    portrait.addEventListener('error', () => {
-      portrait.hidden = true;
-      const fallback = scene.querySelector('.shop-merchant-fallback');
-      if (fallback) fallback.hidden = false;
-    });
-    const fallback = el('div', 'shop-merchant-fallback', 'Продавец ожидает посетителей');
-    fallback.hidden = true;
-    stage.append(portrait, fallback);
-
-    const counter = el('div', 'shop-counter');
-    const showcase = el('article', 'shop-showcase');
-    showcase.hidden = true;
-
-    scene.append(speech, stage, counter, showcase);
-    const bodyParent = body?.parentElement || panel;
-    panel.insertBefore(scene, bodyParent === panel ? body : bodyParent);
-    return scene;
+  function merchantArtKey(merchant) {
+    const source = `${data?.category || ''} ${data?.building || ''} ${merchant?.title || ''} ${merchant?.role || ''}`.toLocaleLowerCase('ru');
+    if (/брон|armou|доспех|щит/.test(source)) return 'armorer';
+    if (/оруж|weapon|арсенал/.test(source)) return 'weaponsmith';
+    if (/библи|книг|spell|гримуар/.test(source)) return 'librarian';
+    if (/алхим|зель|порош|ингредиент/.test(source)) return 'alchemist';
+    if (/маг|артефакт|чар|заклин/.test(source)) return 'mage';
+    if (/рын|торгов|market|общая лавка/.test(source)) return 'market';
+    if (/аксесс|украш|кольц|амулет/.test(source)) return 'accessories';
+    if (/кузн|blacksmith|smith/.test(source)) return 'blacksmith';
+    return ({ dwarf:'blacksmith', orc:'weaponsmith', elf:'librarian', fairy:'mage', halfling:'market' })[String(merchant?.race || '').toLowerCase()] || 'blacksmith';
   }
 
   function renderMerchant() {
-    if (!data) return;
-    const view = ensureMerchantScene();
+    if (!data || !body) return;
+    ensureMerchantStyles();
+    let scene = body.querySelector('.shop-merchant-scene');
+    if (!scene) {
+      scene = el('section', 'shop-merchant-scene');
+      scene.setAttribute('aria-label', 'Торговец за прилавком');
+      body.prepend(scene);
+    }
     const merchant = data.merchant || {
       name: 'Хозяин лавки', race: 'human', raceLabel: 'Торговец',
       title: 'Хозяин магазина', appearance: 'Внимательно следит за ассортиментом.',
       greeting: `Добро пожаловать. Это ${data.building || 'моя лавка'}. Чем могу помочь?`
     };
-    const race = String(merchant.race || 'human').toLowerCase().replace(/[^a-z-]/g, '') || 'human';
-    const type = String(data.category || 'general').toLowerCase().replace(/[^a-z-]/g, '') || 'general';
-    view.dataset.shopType = type;
-    view.dataset.race = race;
-
-    const speech = view.querySelector('.shop-speech');
-    speech.textContent = merchant.greeting || `Добро пожаловать в ${data.building || 'мою лавку'}. Чем могу помочь?`;
-
-    const portrait = view.querySelector('.shop-merchant-art');
-    const fallback = view.querySelector('.shop-merchant-fallback');
-    const portraitUrl = merchant.portraitUrl || merchant.imageUrl || `/assets/merchants/${race}-${type}.webp`;
-    if (portrait.dataset.src !== portraitUrl) {
-      portrait.dataset.src = portraitUrl;
-      portrait.hidden = false;
-      fallback.hidden = true;
-      portrait.src = portraitUrl;
-    }
-    portrait.alt = `${merchant.raceLabel || race}, ${merchant.title || 'продавец'} — ${merchant.name || 'торговец'}`;
-
-    const stage = view.querySelector('.shop-merchant-stage');
-    stage.setAttribute('aria-label', `${merchant.name || 'Торговец'} за прилавком`);
-    if (data.isMaster) {
-      body.classList.add('is-visible');
-      root.querySelector('.shop-toolbar')?.classList.add('is-visible');
-    } else {
-      body.classList.remove('is-visible');
-      root.querySelector('.shop-toolbar')?.classList.remove('is-visible');
-    }
-  }
-
-  function speak(text) {
-    const view = ensureMerchantScene();
-    const bubble = view.querySelector('.shop-speech');
-    bubble.textContent = text || '';
-  }
-
-  function findMentionedItem(reply, playerMessage) {
-    if (!data?.items?.length) return null;
-    const haystack = `${reply || ''} ${playerMessage || ''}`.toLocaleLowerCase('ru');
-    // Показываем только предмет из реального ассортимента, название которого названо в диалоге.
-    return data.items.find(item => item.stock > 0 &&
-      item.name && haystack.includes(String(item.name).toLocaleLowerCase('ru'))) || null;
-  }
-
-  function showItem(item) {
-    if (!item || !data) return;
-    currentShowcase = item;
-    const view = ensureMerchantScene();
-    const card = view.querySelector('.shop-showcase');
-    card.textContent = '';
-    const imageUrl = item.imageUrl || item.image || item.iconUrl;
-    let art;
-    if (imageUrl) {
-      art = el('img', 'shop-showcase-art');
-      art.alt = item.name || 'Демонстрируемый предмет';
-      art.src = imageUrl;
-      art.addEventListener('error', () => {
-        const placeholder = el('div', 'shop-showcase-art', 'Изображение предмета пока не добавлено');
-        art.replaceWith(placeholder);
-      }, { once: true });
-    } else {
-      art = el('div', 'shop-showcase-art', 'Изображение предмета пока не добавлено');
-      art.setAttribute('aria-hidden', 'true');
-    }
-    const info = el('div', 'shop-showcase-info');
-    info.append(
-      el('div', 'shop-showcase-name', item.name),
-      el('div', 'shop-showcase-description',
-        item.description || item.properties || item.type || 'Описание не указано.'),
-      el('div', 'shop-showcase-price', `${fmt(item.price)} зм`)
-    );
-    const actions = el('div', 'shop-showcase-actions');
-    if (!data.isMaster) {
-      const buy = el('button', 'sheet-btn shop-buy', 'Купить');
-      buy.type = 'button';
-      buy.disabled = item.stock <= 0 || data.gold < item.price;
-      buy.addEventListener('click', () => {
-        if (!confirm(`Купить «${item.name}» за ${fmt(item.price)} зм?`)) return;
-        buy.disabled = true;
-        socket.emit('shop:purchase', { itemId: item.id, requestId: uid(), buildingIndex }, (r) => {
-          if (!r?.ok) {
-            status.textContent = r?.error || 'Покупка не выполнена';
-            buy.disabled = false;
-            return;
-          }
-          status.textContent = `Куплено: ${r.item}. Остаток: ${fmt(r.gold)} зм.`;
-          data.gold = r.gold;
-          data.items = data.items.map(x => x.id === item.id ? { ...x, stock: r.stock } : x);
-          renderHeader();
-          card.hidden = true;
-          currentShowcase = null;
-        });
-      });
-      actions.appendChild(buy);
-    }
-    const hide = el('button', 'sheet-btn alt', 'Убрать');
-    hide.type = 'button';
-    hide.addEventListener('click', () => { card.hidden = true; currentShowcase = null; });
-    actions.appendChild(hide);
-    info.appendChild(actions);
-    card.append(art, info);
-    card.hidden = false;
+    const artKey = merchantArtKey(merchant);
+    scene.textContent = '';
+    const heading = el('div', 'shop-merchant-scene-head', merchant.name || 'Хозяин лавки');
+    heading.appendChild(el('span', 'shop-merchant-scene-role', merchant.title || merchant.raceLabel || 'Торговец'));
+    const stage = el('div', 'shop-merchant-stage');
+    const art = el('img', 'shop-merchant-art');
+    art.alt = `${merchant.name || 'Торговец'} — ${merchant.title || 'продавец'}`;
+    art.loading = 'eager';
+    art.src = `/assets/merchants/${artKey}.webp`;
+    art.onerror = () => { art.onerror = null; art.src = '/assets/merchants/blacksmith.webp'; };
+    stage.append(art, el('div', 'shop-merchant-counter'));
+    scene.append(heading, stage, el('p', 'shop-merchant-description', merchant.description || merchant.appearance || 'Торговец ждёт покупателей.'));
   }
 
   function say(text, who = 'merchant') {
     const line = el('div', 'shop-chat-line ' + who, text);
     chatLog.appendChild(line);
     chatLog.scrollTop = chatLog.scrollHeight;
-    if (who === 'merchant') speak(text);
   }
-  function close() { root.hidden = true; root.classList.remove('shop-scene-mode'); data = null; currentShowcase = null; chatLog.textContent = ''; status.textContent = ''; if (scene) scene.remove(); scene = null; }
+  function close() { root.hidden = true; data = null; chatLog.textContent = ''; status.textContent = ''; }
   root.querySelector('.shop-close').addEventListener('click', close);
   root.addEventListener('click', (e) => { if (e.target === root) close(); });
   search.addEventListener('input', () => { query = search.value.trim().toLocaleLowerCase('ru'); renderItems(); });
@@ -276,7 +186,7 @@ export function mountShop(root, { socket } = {}) {
   }
   function open(payload, index) {
     data = payload; buildingIndex = index; filter = payload.category === 'all' ? 'all' : payload.category === 'armor' ? 'armor' : payload.category;
-    query = ''; search.value = ''; status.textContent = ''; chatLog.textContent = ''; currentShowcase = null;
+    query = ''; search.value = ''; status.textContent = ''; chatLog.textContent = '';
     renderHeader();
     for (const b of root.querySelectorAll('[data-filter]')) {
       const key = b.dataset.filter;
@@ -284,8 +194,6 @@ export function mountShop(root, { socket } = {}) {
       b.classList.toggle('on', key === filter);
     }
     root.hidden = false;
-    root.classList.add('shop-scene-mode');
-    renderMerchant();
     renderItems();
     const greeting = payload.merchant?.greeting ||
       `Добро пожаловать. Это ${payload.building}. Здесь продаются товары королевства ${payload.kingdom}.`;
@@ -300,18 +208,8 @@ export function mountShop(root, { socket } = {}) {
     say(message, 'player'); chatInput.value = ''; chatSend.disabled = true;
     socket.emit('shop:chat', { message, buildingIndex }, (r) => {
       chatSend.disabled = false;
-      const reply = r?.reply || r?.error || 'Торговец не ответил.';
-      say(reply);
-      const mentioned = findMentionedItem(reply, message);
-      if (mentioned) showItem(mentioned);
-      if (r?.items) {
-        data.items = r.items;
-        if (currentShowcase) {
-          const refreshed = data.items.find(x => x.id === currentShowcase.id);
-          if (refreshed) showItem(refreshed);
-          else { currentShowcase = null; ensureMerchantScene().querySelector('.shop-showcase').hidden = true; }
-        }
-      }
+      say(r?.reply || r?.error || 'Торговец не ответил.');
+      if (r?.items) { data.items = r.items; renderItems(); }
     });
   }
   chatSend.addEventListener('click', sendChat);
