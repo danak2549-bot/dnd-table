@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { Server } from 'socket.io';
 import { FIXED_PLACES } from './places.js';
 import { loadAll, saveRoom, saveUsers, usingKV } from './store.js';
+import { SHOP_CATALOG } from './shops/catalog.js';
 
 const PORT = process.env.PORT || 3000;
 const MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-5-5';
@@ -28,7 +29,14 @@ let users = {};
 {
   const d = await loadAll();
   users = d.users || {};
-  for (const r of d.rooms) { r.quests = r.quests || []; rooms.set(r.code, r); }
+  for (const r of d.rooms) {
+    r.quests = r.quests || [];
+    for (const t of Object.values(r.tokens || {})) {
+      if (!t.character || typeof t.character !== 'object') t.character = newCharacter();
+      if (!Number.isFinite(Number(t.character.gold))) t.character.gold = 0;
+    }
+    rooms.set(r.code, r);
+  }
   console.log(`Хранилище: ${usingKV ? 'Upstash Redis' : 'файл data.json'}; комнат: ${rooms.size}, аккаунтов: ${Object.keys(users).length}`);
 }
 const dirty = new Set();
@@ -80,6 +88,47 @@ for (const l of LANDMARKS) l.culture = cultureOfName(l.name);
 const SPAWN = LANDMARKS.find((l) => l.name.startsWith('Стальград'));
 const SLOTS = ['head', 'body', 'hands', 'legs', 'feet', 'accessory', 'weapon', 'offhand'];
 
+const SHOP_BY_BUILDING = { smithy: 'weapon', armorer: 'armor', library: 'book', market: 'all', shop: 'all' };
+const KINGDOMS = ['Аард', 'Игни', 'Магор', 'Марокко', 'Мираж', 'Траун'];
+function shopKingdom(scene) {
+  const n = String(scene?.name || '').toLowerCase();
+  if (/траун|лорнэйдар/.test(n)) return 'Траун';
+  if (/каменн|марокко|маунтайн/.test(n)) return 'Марокко';
+  if (/мираж|хоббитон/.test(n)) return 'Мираж';
+  if (/магор/.test(n)) return 'Магор';
+  if (/игни|небес|ангел|фея|fairy/.test(n)) return 'Игни';
+  if (/аард|стальград/.test(n)) return 'Аард';
+  return ({ elf: 'Траун', dwarf: 'Марокко', halfling: 'Мираж', orc: 'Магор', angel: 'Игни', demon: 'Игни', fairy: 'Игни', human: 'Аард' })[scene?.culture] || 'Аард';
+}
+function ensureShopConfig(room) {
+  if (!room.shopConfig || typeof room.shopConfig !== 'object') room.shopConfig = { prices: {}, stock: {}, discounts: {}, customItems: [] };
+  room.shopConfig.prices ||= {}; room.shopConfig.stock ||= {}; room.shopConfig.discounts ||= {};
+  if (!Array.isArray(room.shopConfig.customItems)) room.shopConfig.customItems = [];
+  return room.shopConfig;
+}
+function allShopCatalog(room) {
+  const cfg = ensureShopConfig(room);
+  return [...SHOP_CATALOG, ...cfg.customItems];
+}
+function findShopItem(room, id) {
+  return allShopCatalog(room).find((item) => item.id === id);
+}
+function shopItemView(room, item, pid) {
+  const cfg = ensureShopConfig(room);
+  const basePrice = int(cfg.prices[item.id], 0, 2000000000, item.price);
+  const personalDeal = pid ? int(room.shopDeals?.[pid]?.[item.id], 0, 90, 0) : 0;
+  const discount = Math.max(int(cfg.discounts[item.id], 0, 90, 0), personalDeal);
+  return { ...item, basePrice, discount, price: Math.max(1, Math.floor(basePrice * (100 - discount) / 100)),
+    stock: int(cfg.stock[item.id], 0, 9999, 99) };
+}
+function shopItems(room, category, pid) {
+  const kingdom = shopKingdom(room.scene);
+  return allShopCatalog(room).filter((item) => item.kingdom === kingdom &&
+    (category === 'all' || (category === 'armor' ? ['armor','shield','boots','gloves'].includes(item.category) : item.category === category)))
+    .map((item) => shopItemView(room, item, pid));
+}
+
+
 const res = (v) => { const max = int(v?.max, 0, 9999); return { cur: int(v?.cur, 0, 9999), max }; };
 const acts = (arr) => (Array.isArray(arr) ? arr : []).slice(0, 30).map((a) => ({
   id: str(a?.id, 40) || 'c' + rid(8),
@@ -106,6 +155,7 @@ const SANITIZE = {
   weapons: acts, skills: acts, spells: acts,
   equipment: (o) => Object.fromEntries(SLOTS.map((s) => [s, str(o?.[s], 80)])),
   notes: (v) => str(v, 2000),
+  gold: (v) => int(v, 0, 2000000000),
   inventory: (arr) => (Array.isArray(arr) ? arr : []).slice(0, 40).map((i) => ({
     id: str(i?.id, 40) || 'i' + rid(8), name: str(i?.name, 60), qty: int(i?.qty, 1, 999, 1), note: str(i?.note, 200),
   })),
@@ -116,7 +166,7 @@ const SANITIZE = {
 
 function newCharacter(hp = 20, mana = 10) {
   return {
-    race: '', class: '', level: 1,
+    race: '', class: '', level: 1, gold: 0,
     hp: { cur: hp, max: hp }, mana: { cur: mana, max: mana }, ap: { cur: 3, max: 3 },
     stats: { Сила: 10, Ловкость: 10, Интеллект: 10 },
     weapons: [], skills: [], spells: [], inventory: [],
@@ -129,7 +179,7 @@ const dims = (room) => (room.scene ? { w: room.scene.w, h: room.scene.h } : { w:
 
 // ---------- генератор локаций (город, деревня, замок) ----------
 const BUILD = {
-  smithy: [4, 3], tavern: [5, 3], market: [5, 3], temple: [4, 4], shop: [4, 3], alchemist: [4, 3],
+  smithy: [4, 3], armorer: [4, 3], tavern: [5, 3], market: [5, 3], temple: [4, 4], shop: [4, 3], alchemist: [4, 3],
   stable: [5, 3], guild: [5, 3], castle: [7, 5], tower: [3, 3], mill: [4, 3], farm: [4, 3],
   barracks: [5, 3], inn: [5, 3], well: [1, 1], house: [3, 3],
   library: [5, 4], healer: [4, 3], palace: [8, 6], hut: [2, 2], elder: [4, 3], board: [2, 1],
@@ -144,13 +194,13 @@ const pick = (a) => a[Math.floor(RNG() * a.length)];
 const shuffle = (a) => a.map((v) => [RNG(), v]).sort((p, q) => p[0] - q[0]).map((p) => p[1]);
 const PLANS = {
   village: { size: ['small', 'small', 'medium'], must: ['well'], pool: ['tavern', 'smithy', 'shop', 'healer', 'elder', 'farm', 'mill', 'stable', 'temple', 'alchemist'], n: [2, 4], huts: 2, houses: 0.8, walls: 0.05, river: 0.4 },
-  town: { size: ['medium'], must: ['tavern', 'market', 'smithy', 'temple', 'well', 'elder'], pool: ['shop', 'healer', 'alchemist', 'stable', 'inn', 'guild', 'library', 'mill', 'barracks'], n: [3, 5], huts: 1, houses: 1, walls: 0.3, river: 0.5 },
-  city: { size: ['large'], must: ['tavern', 'inn', 'market', 'smithy', 'temple', 'library', 'healer', 'guild', 'barracks', 'well', 'shop', 'alchemist', 'stable', 'elder'], pool: ['tower', 'mill', 'farm'], n: [0, 2], huts: 0, houses: 1.2, walls: 0.8, river: 0.5 },
-  capital: { size: ['large'], must: ['palace', 'tower', 'tavern', 'inn', 'market', 'smithy', 'temple', 'library', 'healer', 'guild', 'barracks', 'well', 'shop', 'alchemist', 'stable', 'elder'], pool: ['mill', 'farm'], n: [0, 1], huts: 0, houses: 1.3, walls: 1, river: 0.6 },
+  town: { size: ['medium'], must: ['tavern', 'market', 'smithy', 'armorer', 'temple', 'well', 'elder'], pool: ['shop', 'healer', 'alchemist', 'stable', 'inn', 'guild', 'library', 'mill', 'barracks'], n: [3, 5], huts: 1, houses: 1, walls: 0.3, river: 0.5 },
+  city: { size: ['large'], must: ['tavern', 'inn', 'market', 'smithy', 'armorer', 'temple', 'library', 'healer', 'guild', 'barracks', 'well', 'shop', 'alchemist', 'stable', 'elder'], pool: ['tower', 'mill', 'farm'], n: [0, 2], huts: 0, houses: 1.2, walls: 0.8, river: 0.5 },
+  capital: { size: ['large'], must: ['palace', 'tower', 'tavern', 'inn', 'market', 'smithy', 'armorer', 'temple', 'library', 'healer', 'guild', 'barracks', 'well', 'shop', 'alchemist', 'stable', 'elder'], pool: ['mill', 'farm'], n: [0, 1], huts: 0, houses: 1.3, walls: 1, river: 0.6 },
   fort: { size: ['medium'], must: ['castle', 'barracks', 'smithy', 'well', 'stable', 'tower'], pool: ['tavern', 'healer'], n: [0, 1], huts: 0, houses: 0.3, walls: 1, river: 0.2 },
   port: { size: ['medium'], must: ['tavern', 'market', 'inn', 'well', 'smithy'], pool: ['shop', 'healer', 'temple', 'guild', 'alchemist'], n: [1, 3], huts: 1, houses: 0.9, walls: 0.1, river: 1 },
 };
-const BNAME = { smithy: 'Кузня', tavern: 'Таверна', market: 'Рынок', temple: 'Храм', shop: 'Лавка', alchemist: 'Алхимик', healer: 'Знахарь', library: 'Библиотека', elder: 'Дом старосты', hut: 'Хижина', stable: 'Конюшня', guild: 'Гильдия', castle: 'Замок', palace: 'Дворец', tower: 'Башня', mill: 'Мельница', farm: 'Ферма', barracks: 'Казармы', inn: 'Постоялый двор', well: 'Колодец', board: 'Доска объявлений', house: 'Дом' };
+const BNAME = { smithy: 'Кузня', armorer: 'Бронная мастерская', tavern: 'Таверна', market: 'Рынок', temple: 'Храм', shop: 'Лавка', alchemist: 'Алхимик', healer: 'Знахарь', library: 'Библиотека', elder: 'Дом старосты', hut: 'Хижина', stable: 'Конюшня', guild: 'Гильдия', castle: 'Замок', palace: 'Дворец', tower: 'Башня', mill: 'Мельница', farm: 'Ферма', barracks: 'Казармы', inn: 'Постоялый двор', well: 'Колодец', board: 'Доска объявлений', house: 'Дом' };
 const TAVERNS = ['Золотой дракон', 'Пьяный гном', 'Весёлый кабан', 'Тихая гавань', 'Ржавый кубок', 'Серебряный олень', 'Три бочки', 'Хромой пёс'];
 function bname(type, culture) {
   if (type === 'tavern' || type === 'inn') return (type === 'inn' ? 'Двор' : 'Таверна') + ' «' + pick(TAVERNS) + '»';
@@ -287,8 +337,17 @@ const KNOWN = [
 ];
 const normName = (n) => String(n || '').toLowerCase().replace(/ё/g, 'е').replace(/[^а-яa-z0-9 ]/g, '').trim();
 function fixedScene(p) {
+  const buildings = p.buildings.map((b) => ({ ...b }));
+  if (!buildings.some((b) => b.type === 'armorer')) {
+    let spot = null;
+    for (let y = 2; y < p.h - 4 && !spot; y++) for (let x = 2; x < p.w - 5; x++) {
+      const free = !buildings.some((b) => x < b.x + b.w + 1 && x + 4 > b.x - 1 && y < b.y + b.h + 1 && y + 3 > b.y - 1);
+      if (free) { spot = { x, y }; break; }
+    }
+    if (spot) buildings.push({ type: 'armorer', name: 'Бронная мастерская', ...spot, w: 4, h: 3 });
+  }
   return { id: 'f-' + p.key, culture: p.culture, name: p.name, kind: p.kind, description: p.description, w: p.w, h: p.h,
-    tiles: p.tiles.slice(), buildings: p.buildings.map((b) => ({ ...b })), spawn: { ...p.spawn }, art: p.art, walk: p.walk };
+    tiles: p.tiles.slice(), buildings, spawn: { ...p.spawn }, art: p.art, walk: p.walk };
 }
 // Возвращает готовую сцену. Один и тот же город всегда рисуется одинаково.
 function resolveScene(room, spec) {
@@ -656,6 +715,54 @@ function applyAction(room, a) {
   }
 }
 
+
+async function merchantAnswer(room, building, message, pid) {
+  const category = SHOP_BY_BUILDING[building.type];
+  const kingdom = shopKingdom(room.scene);
+  const available = shopItems(room, category, pid);
+  const lower = message.toLocaleLowerCase('ru');
+  if (/торг|скидк|подешев|уступ|сбрось цену/.test(lower)) {
+    const target = available.find((x) => lower.includes(x.name.toLocaleLowerCase('ru')) ||
+      x.name.toLocaleLowerCase('ru').split(/[—–-]/)[0].trim().length > 4 && lower.includes(x.name.toLocaleLowerCase('ru').split(/[—–-]/)[0].trim()));
+    if (!target) return { reply: 'Могу обсудить цену. Назови конкретный предмет, за который хочешь поторговаться.' };
+    room.shopBargainsUsed ||= {};
+    room.shopBargainsUsed[pid] ||= {};
+    if (room.shopBargainsUsed[pid][target.id]) return { reply: `За «${target.name}» я уже уступал. Повторной скидки на этот предмет не будет.` };
+    room.shopBargainsUsed[pid][target.id] = true;
+    room.shopDeals ||= {}; room.shopDeals[pid] ||= {};
+    room.shopDeals[pid][target.id] = 5;
+    save(room);
+    return { reply: `Ладно, договорились: скидка 5% на «${target.name}». Новая цена — ${Math.max(1, Math.floor(target.basePrice * (100 - Math.max(target.discount,5)) / 100)).toLocaleString('ru-RU')} зм. Скидка действует до покупки.`,
+      items: shopItems(room, category, pid) };
+  }
+  const inventory = available.slice(0, 140).map((x) => ({
+    name: x.name, category: x.category, price: x.price, stock: x.stock,
+    description: x.description, damage: x.damage, armorClass: x.armorClass,
+    spell: x.spell, spellLevel: x.spellLevel, manaCost: x.manaCost,
+  }));
+  const system = `Ты торговец в фэнтези-магазине королевства ${kingdom}. Отвечай по-русски, кратко, в характере опытного торговца. Тебе доступен только этот ассортимент: ${JSON.stringify(inventory)}. Отвечай на вопросы о наличии, свойствах и сравнении только по этим данным. Не выдумывай предметы, характеристики или цены. Не меняй баланс, инвентарь, запас и цены. Покупка возможна только кнопкой «Купить» с подтверждением. Торг проводится отдельным запросом и скидка не может превышать 5% один раз на предмет.`;
+  if (GROQ_KEY) {
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + GROQ_KEY },
+      body: JSON.stringify({ model: GROQ_MODEL, max_tokens: 450, temperature: 0.45,
+        messages: [{ role: 'system', content: system }, { role: 'user', content: message }] }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data?.error?.message || 'Торговец временно недоступен');
+    return { reply: String(data.choices?.[0]?.message?.content || 'Пока не могу ответить.').slice(0, 1600) };
+  }
+  if (KEY) {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: MODEL, max_tokens: 450, system, messages: [{ role: 'user', content: message }] }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data?.error?.message || 'Торговец временно недоступен');
+    return { reply: (data.content || []).filter((x) => x.type === 'text').map((x) => x.text).join('\n').slice(0, 1600) };
+  }
+  return { reply: `В этой лавке ${available.length} товаров королевства ${kingdom}. Могу подсказать свойства, сравнить цены и наличие. Для покупки нажми «Купить» у выбранного предмета.` };
+}
+
 // ---------- сокеты ----------
 io.on('connection', (socket) => {
   socket.data = { code: null, role: null, pid: null };
@@ -763,6 +870,107 @@ io.on('connection', (socket) => {
     ack({ ok: true });
     emitState(r);
   }));
+
+  socket.on('shop:open', safe(({ buildingIndex }, ack) => {
+    const r = room();
+    if (!r || !r.scene || !Number.isInteger(Number(buildingIndex))) return ack({ ok: false, error: 'Магазин недоступен' });
+    const building = r.scene.buildings[Number(buildingIndex)];
+    const category = building && SHOP_BY_BUILDING[building.type];
+    if (!building || !category) return ack({ ok: false, error: 'Это здание не является магазином' });
+    const token = myTok(r);
+    ack({ ok: true, building: building.name, buildingType: building.type, category,
+      kingdom: shopKingdom(r.scene), items: shopItems(r, category, socket.data.pid),
+      gold: token ? int(token.character.gold, 0, 2000000000) : null, isMaster: master() });
+  }));
+
+  socket.on('shop:purchase', safe(({ itemId, requestId, buildingIndex }, ack) => {
+    const r = room(); const token = r && myTok(r);
+    if (!r || !r.scene || !token || master()) return ack({ ok: false, error: 'Покупать может только персонаж игрока в магазине' });
+    const id = str(itemId, 80), req = str(requestId, 80);
+    if (!id || !req) return ack({ ok: false, error: 'Некорректная покупка' });
+    r.shopTransactions ||= [];
+    if (r.shopTransactions.includes(req)) return ack({ ok: false, error: 'Эта покупка уже обработана' });
+    if (!r.scene || !Array.isArray(r.scene.buildings)) return ack({ ok: false, error: 'Сейчас вы не в поселении' });
+    const item = findShopItem(r, id);
+    const bi = Number(buildingIndex);
+    const building = Number.isInteger(bi) && bi >= 0 ? r.scene.buildings[bi] : null;
+    const allowed = building && SHOP_BY_BUILDING[building.type];
+    const categoryAllowed = allowed === 'all' || (allowed === 'armor' ? ['armor','shield','boots','gloves'].includes(item?.category) : item?.category === allowed);
+    if (!item || !allowed || !categoryAllowed || item.kingdom !== shopKingdom(r.scene)) return ack({ ok: false, error: 'Товар не продаётся в этом магазине' });
+    const cfg = ensureShopConfig(r);
+    const stock = int(cfg.stock[id], 0, 9999, 99);
+    if (stock <= 0) return ack({ ok: false, error: 'Товар закончился' });
+    const price = shopItemView(r, item, socket.data.pid).price;
+    const gold = int(token.character.gold, 0, 2000000000);
+    if (gold < price) return ack({ ok: false, error: `Недостаточно золота. Нужно ${price.toLocaleString('ru-RU')} зм.` });
+    const inventory = Array.isArray(token.character.inventory) ? token.character.inventory : [];
+    const existing = inventory.find((x) => x.name === item.name);
+    if (existing && int(existing.qty, 1, 999, 1) >= 999) return ack({ ok: false, error: 'В одной ячейке инвентаря не может быть больше 999 предметов.' });
+    if (!existing && inventory.length >= 40) return ack({ ok: false, error: 'Инвентарь заполнен. Освободите место.' });
+    token.character.gold = gold - price;
+    if (existing) existing.qty = int(existing.qty, 1, 999, 1) + 1;
+    else inventory.push({ id: 'shop-' + rid(8), name: item.name, qty: 1,
+      note: [item.description, item.damage ? 'Урон: ' + item.damage : '', item.armorClass ? 'КД: ' + item.armorClass : '',
+        item.spell ? 'Заклинание: ' + item.spell : '', item.manaCost ? 'Мана: ' + item.manaCost : '',
+        `Королевство: ${item.kingdom}; цена покупки: ${price} зм.`].filter(Boolean).join(' | ').slice(0, 200) });
+    token.character.inventory = inventory.slice(0, 40);
+    cfg.stock[id] = stock - 1;
+    r.shopTransactions.push(req); r.shopTransactions = r.shopTransactions.slice(-100);
+    log(r, `${token.name} покупает «${item.name}» за ${price.toLocaleString('ru-RU')} зм.`, 'info');
+    ack({ ok: true, gold: token.character.gold, stock: cfg.stock[id], item: item.name });
+    emitState(r);
+  }));
+
+  socket.on('shop:admin:add-custom', safe(({ buildingIndex, name, description, category, price, stock }, ack) => {
+    const r = room();
+    if (!r || !master()) return ack({ ok: false, error: 'Только мастер может добавлять товары' });
+    if (!r.scene || !Array.isArray(r.scene.buildings)) return ack({ ok: false, error: 'Сейчас вы не в поселении' });
+    const bi = Number(buildingIndex);
+    const building = Number.isInteger(bi) && bi >= 0 ? r.scene.buildings[bi] : null;
+    const allowed = building && SHOP_BY_BUILDING[building.type];
+    const valid = ['weapon', 'armor', 'shield', 'boots', 'gloves', 'book'];
+    const armorTypes = ['armor', 'shield', 'boots', 'gloves'];
+    const cleanName = str(name, 80).trim();
+    if (!allowed || !cleanName || !valid.includes(category) ||
+      !(allowed === 'all' || (allowed === 'armor' ? armorTypes.includes(category) : category === allowed)))
+      return ack({ ok: false, error: 'Проверь название и категорию товара для этой лавки' });
+    const cfg = ensureShopConfig(r);
+    if (cfg.customItems.length >= 200) return ack({ ok: false, error: 'Лимит пользовательских товаров — 200' });
+    const item = {
+      id: 'custom-' + rid(10), kingdom: shopKingdom(r.scene), category,
+      name: cleanName, type: 'Пользовательский предмет',
+      price: int(price, 1, 2000000000, 1), description: str(description, 500),
+      damage: '', armorClass: '', spell: '', spellLevel: 0, manaCost: 0,
+    };
+    cfg.customItems.push(item);
+    cfg.stock[item.id] = int(stock, 0, 9999, 1);
+    save(r);
+    ack({ ok: true, item: shopItemView(r, item, socket.data.pid) });
+  }));
+
+  socket.on('shop:admin:update', safe(({ itemId, price, stock, discount }, ack) => {
+    const r = room();
+    if (!r || !master()) return ack({ ok: false, error: 'Только мастер может менять магазин' });
+    const item = findShopItem(r, str(itemId, 80));
+    if (!item) return ack({ ok: false, error: 'Предмет не найден' });
+    const cfg = ensureShopConfig(r);
+    cfg.prices[item.id] = int(price, 1, 2000000000, item.price);
+    cfg.stock[item.id] = int(stock, 0, 9999, 99);
+    cfg.discounts[item.id] = int(discount, 0, 90, 0);
+    save(r);
+    ack({ ok: true, item: shopItemView(r, item) });
+  }));
+
+  socket.on('shop:chat', ({ message, buildingIndex }, ack = () => {}) => {
+    const r = room();
+    const bi = Number(buildingIndex);
+    const building = r?.scene?.buildings && Number.isInteger(bi) && bi >= 0 ? r.scene.buildings[bi] : null;
+    if (!r || !building || !SHOP_BY_BUILDING[building.type]) return ack({ ok: false, error: 'Магазин недоступен' });
+    const text = str(message, 500).trim();
+    if (!text) return ack({ ok: false, error: 'Напиши вопрос торговцу' });
+    merchantAnswer(r, building, text, socket.data.pid).then((result) => ack({ ok: true, ...result }))
+      .catch((e) => ack({ ok: false, error: e.message || 'Торговец не ответил' }));
+  });
 
   socket.on('token:move', safe(({ id, x, y }, ack) => {
     const r = room(); const t = r?.tokens[id];
