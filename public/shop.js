@@ -21,7 +21,7 @@ export function mountShop(root, { socket } = {}) {
   const chatSend = root.querySelector('.shop-chat-send');
 
   // Сцена расположена отдельно от каталога, чтобы скрытие каталога не скрывало NPC.
-  let scene = null, speech = null, showcase = null;
+  let scene = null, speech = null, speechText = null, showcase = null;
   function merchantArtKey(merchant) {
     const source = `${data?.category || ''} ${data?.building || ''} ${merchant?.title || ''} ${merchant?.role || ''}`.toLocaleLowerCase('ru');
     if (/брон|armou|доспех|щит/.test(source)) return 'armorer';
@@ -40,7 +40,9 @@ export function mountShop(root, { socket } = {}) {
     const panel = root.querySelector('.shop-panel');
     scene = el('section', 'shop-scene');
     scene.setAttribute('aria-label', 'Торговец за прилавком');
-    speech = el('div', 'shop-speech', 'Торговец ожидает вашего вопроса.');
+    speech = el('div', 'shop-speech');
+    speechText = el('div', 'shop-speech-text', 'Торговец ожидает вашего вопроса.');
+    speech.appendChild(speechText);
     speech.setAttribute('aria-live', 'polite');
     const stage = el('div', 'shop-merchant-stage');
     const art = el('img', 'shop-merchant-art');
@@ -68,7 +70,7 @@ export function mountShop(root, { socket } = {}) {
     art.alt = `${merchant.name || 'Торговец'} — ${merchant.title || 'продавец'}`;
     art.onerror = () => { art.onerror = null; art.src = '/assets/merchants/blacksmith.webp'; };
     art.src = `/assets/merchants/${artKey}.webp`;
-    if (speech && !speech.textContent.trim()) speech.textContent = merchant.greeting || 'Чем могу помочь?';
+    if (speechText && !speechText.textContent.trim()) speechText.textContent = merchant.greeting || 'Чем могу помочь?';
     root.classList.toggle('shop-master-mode', !!data.isMaster);
     const toolbar = root.querySelector('.shop-toolbar');
     if (toolbar) toolbar.classList.toggle('is-visible', !!data.isMaster);
@@ -126,7 +128,7 @@ export function mountShop(root, { socket } = {}) {
     const line = el('div', 'shop-chat-line ' + who, text);
     chatLog.appendChild(line);
     chatLog.scrollTop = chatLog.scrollHeight;
-    if (who === 'merchant' && speech) speech.textContent = text;
+    if (who === 'merchant' && speechText) { speechText.textContent = text; speechText.scrollTop = 0; }
   }
   function close() { root.hidden = true; root.classList.remove('shop-scene-mode','shop-master-mode'); data = null; chatLog.textContent = ''; status.textContent = ''; if (showcase) showcase.hidden = true; }
   root.querySelector('.shop-close').addEventListener('click', close);

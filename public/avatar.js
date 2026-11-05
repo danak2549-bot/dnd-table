@@ -157,8 +157,9 @@ export function heroInner({ name, race, equipment, weapons, phase = 0 }) {
 
 export function renderAvatar(box, token) {
   const c = token && token.character;
-  if (!c || !c.equipment || typeof c.equipment !== 'object') { box.hidden = true; return; }
-  const { inner, weapon, eq } = heroInner({ name: token.name, race: c.race, equipment: c.equipment, weapons: c.weapons });
+  if (!c) { box.hidden = true; return; }
+  const equipment = c.equipment && typeof c.equipment === 'object' ? c.equipment : {};
+  const { inner, weapon, eq } = heroInner({ name: token.name, race: c.race, equipment, weapons: c.weapons });
   box.querySelector('.av-svg').style.width = '';
   box.querySelector('.av-svg').innerHTML = `<svg viewBox="0 -20 200 310" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Персонаж"><ellipse cx="100" cy="276" rx="60" ry="9" fill="#000" opacity=".25"/>${inner}</svg>`;
   const ul = box.querySelector('.av-list'); ul.textContent = '';

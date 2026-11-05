@@ -108,8 +108,9 @@ function paint(o, g, L, img, back, front, top, phase, outH) {
 export function renderPhotoAvatar(box, token) {
   const c = token && token.character;
   const id = c && photoId(c.race);
-  if (!id || !c.equipment) return false;
-  const eq = c.equipment, weapon = eq.weapon || (Array.isArray(c.weapons) && c.weapons[0] ? c.weapons[0].name : '');
+  if (!id) return false;
+  const eq = c.equipment && typeof c.equipment === 'object' ? c.equipment : {};
+  const weapon = eq.weapon || (Array.isArray(c.weapons) && c.weapons[0] ? c.weapons[0].name : '');
   const cv = composeHero({ id, eq, weapon }, 0, 560, () => renderPhotoAvatar(box, token));
   const holder = box.querySelector('.av-svg');
   if (holder) holder.style.width = '210px';

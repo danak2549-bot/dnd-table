@@ -136,10 +136,16 @@ body { margin:0; background:var(--bg); color:var(--txt); font:16px/1.4 system-ui
 .shop-scene[data-shop-type="armorer"]{background:linear-gradient(180deg,#20232a,#34343a 58%,#17171d)}
 .shop-scene[data-shop-type="alchemist"],.shop-scene[data-shop-type="potion"]{background:radial-gradient(ellipse at 50% 48%,#48b98b2c,transparent 38%),linear-gradient(180deg,#172823,#253b31 58%,#14191a)}
 .shop-speech {
-  position:relative;z-index:5;align-self:center;width:min(720px,94%);margin:0 auto auto;
-  padding:13px 18px;color:#282019;background:linear-gradient(145deg,#fff9ed,#e9dcc6);
-  border:1px solid #fff2d7;border-radius:18px;box-shadow:0 8px 30px #0008;
-  font-size:clamp(14px,1.8vw,18px);line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;
+  position:relative;z-index:5;align-self:center;width:min(720px,94%);max-height:min(34vh,270px);
+  flex:0 1 auto;margin:0 auto;padding:13px 18px;color:#282019;
+  background:linear-gradient(145deg,#fff9ed,#e9dcc6);
+  border:1px solid #fff2d7;border-radius:18px;box-shadow:0 8px 30px #0008;overflow:visible;
+  font-size:clamp(14px,1.8vw,18px);line-height:1.45;
+}
+.shop-speech-text {
+  max-height:calc(min(34vh,270px) - 28px);overflow-y:auto;overscroll-behavior:contain;
+  white-space:pre-wrap;overflow-wrap:anywhere;padding-right:5px;
+  scrollbar-width:thin;scrollbar-color:#a88b68 transparent;
 }
 .shop-speech:after{content:"";position:absolute;left:50%;bottom:-10px;width:18px;height:18px;background:#e9dcc6;border-right:1px solid #fff2d7;border-bottom:1px solid #fff2d7;transform:translateX(-50%) rotate(45deg)}
 .shop-merchant-stage{position:relative;z-index:2;display:flex;align-items:flex-end;justify-content:center;flex:1 1 auto;min-height:190px;margin:12px auto 0;width:min(760px,100%)}
@@ -170,7 +176,8 @@ body { margin:0; background:var(--bg); color:var(--txt); font:16px/1.4 system-ui
  .shop-scene-mode .shop-panel{width:100%;height:100dvh;max-height:100dvh;border-radius:0;border:0}
  .shop-scene-mode .shop-header{padding:10px 12px}
  .shop-scene{min-height:0;padding:12px 10px 20px}
- .shop-speech{width:96%;padding:11px 13px}
+ .shop-speech{width:96%;max-height:28vh;padding:11px 13px}
+ .shop-speech-text{max-height:calc(28vh - 24px)}
  .shop-merchant-stage{min-height:150px}
  .shop-merchant-art{max-width:88vw;max-height:42vh}
  .shop-counter{margin-left:-10px;margin-right:-10px}

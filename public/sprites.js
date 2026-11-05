@@ -70,9 +70,11 @@ export function lookOfToken(t) {
     return { key: `p|${t.name}|${c.race || ''}|${JSON.stringify(eq)}|${c.weapons && c.weapons[0] ? c.weapons[0].name : ''}`,
       hero: { name: t.name, race: c.race, equipment: eq, weapons: c.weapons }, scale: 1 };
   }
-  if (t.role) {
-    const eq = roleEq(t.role, t.name);
-    return { key: `n|${t.name}|${t.race}|${t.role}`, hero: { name: t.name, race: t.race, equipment: eq, weapons: [] }, scale: 1 };
+  if (t.role || t.type === 'npc') {
+    const role = t.role || '';
+    const race = c.race || t.race || 'Человек';
+    const eq = roleEq(role, t.name);
+    return { key: `n|${t.name}|${race}|${role}`, hero: { name: t.name, race, equipment: eq, weapons: [] }, scale: 1 };
   }
   const a = creatureArt(t.name);
   if (a.hero) return { key: `m|${t.name}`, hero: { name: t.name, race: a.hero.race, equipment: a.hero.eq, weapons: [] }, scale: a.scale };
