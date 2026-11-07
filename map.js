@@ -1,0 +1,83 @@
+import { drawActors } from './actors.js';
+import { renderScene } from './scene-art.js';
+// Карта на canvas: фон, сетка, токены, масштаб и сдвиг (view = {s, x, y}).
+const bgCache = new Map();
+function bgImage(url, cb) {
+  if (!url) return null;
+  const c = bgCache.get(url);
+  if (c) return c.complete && c.naturalWidth ? c : null;
+  const img = new Image(); img.onload = cb; img.src = url; bgCache.set(url, img);
+  return null;
+}
+
+let sceneCache = { key: null, canvas: null };
+function sceneCanvas(scene) {
+  const key = scene.id || scene.name + scene.w + scene.h;
+  if (sceneCache.key !== key) {
+    const px = Math.max(24, Math.min(64, Math.floor(3000 / scene.w)));
+    try { sceneCache = { key, canvas: renderScene(scene, px) }; }
+    catch (e) { console.error('scene render failed', e); sceneCache = { key, canvas: null }; }
+  }
+  return sceneCache.canvas;
+}
+function drawLabels(g, scene, cell, view) {
+  if (view.s < 1.5) return;
+  g.font = `700 ${cell * 0.55}px system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (const b of scene.buildings) {
+    if (!b.name || b.type === 'house') continue;
+    const tw = g.measureText(b.name).width + cell * 0.5, th = cell * 0.8;
+    const tx = (b.x + b.w / 2) * cell, ty = (b.y + b.h) * cell + th * 0.55;
+    g.fillStyle = 'rgba(20,22,30,.8)'; g.beginPath();
+    if (g.roundRect) g.roundRect(tx - tw / 2, ty - th / 2, tw, th, th / 2); else g.rect(tx - tw / 2, ty - th / 2, tw, th);
+    g.fill();
+    g.fillStyle = '#fff'; g.fillText(b.name, tx, ty + cell * 0.03);
+  }
+}
+
+export const MAXZ = 8;
+export function clampView(view, W, H) {
+  view.s = Math.max(1, Math.min(MAXZ, view.s));
+  view.x = Math.min(0, Math.max(W - W * view.s, view.x));
+  view.y = Math.min(0, Math.max(H - H * view.s, view.y));
+}
+
+export function drawMap(canvas, state, selId, view, now = performance.now()) {
+  const { w, h } = state.map;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth || 360;
+  const cell = W / w, H = cell * h;
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  canvas.style.height = H + 'px';
+  clampView(view, W, H);
+  const g = canvas.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = '#101117'; g.fillRect(0, 0, W, H);
+  g.save();
+  g.translate(view.x, view.y); g.scale(view.s, view.s);
+  if (state.scene && state.scene.art) {
+    const ai = bgImage(state.scene.art, () => drawMap(canvas, state, selId, view, now));
+    if (ai) g.drawImage(ai, 0, 0, W, H); else { g.fillStyle = '#23252c'; g.fillRect(0, 0, W, H); }
+  } else if (state.scene) {
+    const sc = sceneCanvas(state.scene);
+    if (sc) g.drawImage(sc, 0, 0, W, H); else { g.fillStyle = '#7ea85c'; g.fillRect(0, 0, W, H); }
+  }
+  const img = state.scene ? null : bgImage(state.map.bg, () => drawMap(canvas, state, selId, view));
+  if (img) g.drawImage(img, 0, 0, W, H);
+  g.strokeStyle = state.scene && state.scene.art ? 'rgba(255,255,255,.07)' : state.scene ? 'rgba(0,0,0,.1)' : 'rgba(255,255,255,.16)'; g.lineWidth = 1 / view.s;
+  for (let i = 0; i <= w; i++) { g.beginPath(); g.moveTo(i * cell, 0); g.lineTo(i * cell, H); g.stroke(); }
+  for (let j = 0; j <= h; j++) { g.beginPath(); g.moveTo(0, j * cell); g.lineTo(W, j * cell); g.stroke(); }
+  if (state.scene) drawLabels(g, state.scene, cell, view);
+  drawActors(g, state, cell, view, selId, now);
+  g.restore();
+}
+
+export function cellFromEvent(canvas, state, e, view) {
+  const r = canvas.getBoundingClientRect();
+  const cell = r.width / state.map.w;
+  const wx = (e.clientX - r.left - view.x) / view.s, wy = (e.clientY - r.top - view.y) / view.s;
+  return {
+    x: Math.max(0, Math.min(state.map.w - 1, Math.floor(wx / cell))),
+    y: Math.max(0, Math.min(state.map.h - 1, Math.floor(wy / cell))),
+  };
+}
+export const hitToken = (state, c) => [...state.tokens].reverse().find((t) => t.x === c.x && t.y === c.y) || [...state.tokens].reverse().find((t) => t.x === c.x && t.y === c.y + 1) || null;

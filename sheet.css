@@ -1,0 +1,88 @@
+/* Лист персонажа. Все классы с префиксом sheet-. */
+.sheet {
+  --sheet-bg: #1e1f26;
+  --sheet-panel: #2b2d38;
+  --sheet-panel2: #353848;
+  --sheet-accent: #3d5afe;
+  --sheet-text: #e8e9f0;
+  --sheet-dim: #9a9db0;
+  color: var(--sheet-text);
+  background: var(--sheet-bg);
+  padding: 12px;
+  box-sizing: border-box;
+  max-width: 100%;
+}
+.sheet *, .sheet *::before, .sheet *::after { box-sizing: border-box; }
+.sheet-title { margin: 0 0 6px; font-size: 20px; overflow-wrap: anywhere; }
+.sheet-h { margin: 18px 0 8px; font-size: 16px; color: var(--sheet-dim); text-transform: uppercase; letter-spacing: .04em; }
+.sheet-empty { color: var(--sheet-dim); padding: 8px 0; font-size: 14px; }
+.sheet-label { display: block; font-size: 12px; color: var(--sheet-dim); margin-bottom: 3px; }
+.sheet-sep { color: var(--sheet-dim); padding: 0 4px; }
+.sheet-status { min-height: 20px; font-size: 13px; margin-bottom: 8px; }
+.sheet-status-saved { color: #6fcf97; }
+.sheet-status-saving { color: var(--sheet-dim); }
+.sheet-status-error { color: #ff7a7a; font-weight: 600; }
+.sheet-input {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  font-size: 16px; /* не даёт мобильным браузерам приближать страницу */
+  color: var(--sheet-text);
+  background: var(--sheet-bg);
+  border: 1px solid #454860;
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-height: 40px;
+}
+.sheet-input:focus { outline: none; border-color: var(--sheet-accent); box-shadow: 0 0 0 2px rgba(61, 90, 254, .35); }
+textarea.sheet-input { resize: vertical; }
+.sheet-num { text-align: center; padding-left: 4px; padding-right: 4px; }
+.sheet-btn {
+  font: inherit;
+  font-size: 16px;
+  min-height: 40px;
+  padding: 6px 14px;
+  color: var(--sheet-text);
+  background: var(--sheet-accent);
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.sheet-btn:disabled { opacity: .4; cursor: default; }
+.sheet-btn-del { background: var(--sheet-panel2); min-width: 40px; padding: 6px 10px; flex: none; }
+.sheet-btn-del:hover { background: #8c2f3a; }
+.sheet-resources { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sheet-res { background: var(--sheet-panel); border-radius: 10px; padding: 8px; }
+.sheet-res-title { font-weight: 600; margin-bottom: 4px; }
+.sheet-pair { display: flex; align-items: center; }
+.sheet-block { margin-top: 4px; }
+.sheet-stats, .sheet-cards { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.sheet-stat-row { display: flex; align-items: center; gap: 4px; }
+.sheet-stat-name { flex: 1 1 auto; }
+.sheet-stat-row .sheet-num { width: 90px; flex: none; }
+.sheet-card { background: var(--sheet-panel); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.sheet-card-head { display: flex; gap: 8px; }
+.sheet-card-name { font-weight: 600; }
+.sheet-card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sheet-field { display: block; min-width: 0; }
+.sheet-field-dice { grid-column: span 2; }
+.sheet-equip { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: var(--sheet-panel); border-radius: 10px; padding: 10px; }
+.sheet-notes { min-height: 100px; }
+/* режим только для чтения */
+.sheet-ro-res, .sheet-ro-equip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sheet-ro-equip { grid-template-columns: 1fr 1fr; }
+.sheet-ro-item { background: var(--sheet-panel); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.sheet-ro-val { display: block; font-size: 16px; overflow-wrap: anywhere; }
+.sheet-ro-enemy { font-size: 18px; margin: 6px 0; }
+.sheet-dead { color: #ff7a7a; }
+.sheet-bar { height: 10px; background: var(--sheet-panel); border-radius: 5px; overflow: hidden; }
+.sheet-bar-fill { height: 100%; background: #6fcf97; }
+/* узкий экран: одна колонка */
+@media (max-width: 520px) {
+  .sheet-resources { grid-template-columns: 1fr; }
+  .sheet-card-grid { grid-template-columns: 1fr 1fr; }
+  .sheet-field-dice { grid-column: span 2; }
+  .sheet-equip { grid-template-columns: 1fr; }
+  .sheet-ro-res, .sheet-ro-equip { grid-template-columns: 1fr; }
+  .sheet-pair .sheet-num { flex: 1 1 0; }
+}
