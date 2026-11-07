@@ -6,7 +6,7 @@ function bgImage(url, cb) {
   if (!url) return null;
   const c = bgCache.get(url);
   if (c) return c.complete && c.naturalWidth ? c : null;
-  const img = new Image(); img.onload = cb; img.src = url; bgCache.set(url, img);
+  const img = new Image(); img.onload = cb; img.onerror = () => { bgCache.delete(url); console.error('Не удалось загрузить изображение карты:', url); }; img.src = url; bgCache.set(url, img);
   return null;
 }
 

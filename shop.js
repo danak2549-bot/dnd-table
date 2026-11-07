@@ -55,7 +55,7 @@ export function mountShop(root, { socket } = {}) {
     const items = data.items.filter((item) => (filter === 'all' || item.category === filter ||
       (filter === 'armor' && ['armor','shield','boots','gloves'].includes(item.category))) &&
       (!query || (item.name + ' ' + item.description + ' ' + (item.spell || '')).toLocaleLowerCase('ru').includes(query)));
-    if (!items.length) { body.appendChild(el('div', 'shop-empty', 'В этой лавке таких товаров нет.')); renderMerchant(); return; }
+    if (!items.length) { body.appendChild(el('div', 'shop-empty', data.items.length ? 'По выбранному фильтру товаров нет.' : 'Ассортимент не получен от сервера. Проверьте категорию лавки и королевство.')); renderMerchant(); return; }
     for (const item of items) {
       const card = el('article', 'shop-item');
       const head = el('div', 'shop-item-head');
@@ -117,7 +117,7 @@ export function mountShop(root, { socket } = {}) {
     gold.textContent = data.isMaster ? 'Режим мастера: настройка цен и остатков' : 'Ваше золото: ' + fmt(data.gold) + ' зм';
   }
   function open(payload, index) {
-    data = payload; buildingIndex = index; filter = payload.category === 'all' ? 'all' : payload.category === 'armor' ? 'armor' : payload.category;
+    data = { ...payload, items: Array.isArray(payload.items) ? payload.items : [] }; buildingIndex = index; filter = payload.category === 'all' ? 'all' : payload.category === 'armor' ? 'armor' : payload.category;
     query = ''; search.value = ''; status.textContent = '';
     renderHeader();
     for (const b of root.querySelectorAll('[data-filter]')) {

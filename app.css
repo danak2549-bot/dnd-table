@@ -162,9 +162,11 @@ body { margin:0; background:var(--bg); color:var(--txt); font:16px/1.4 system-ui
 .shop-showcase-actions{display:flex;gap:7px;margin-top:9px}
 @keyframes shop-item-reveal{from{opacity:0;transform:translate(-50%,15px) scale(.96)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
 
-/* Обычный магазин: ассортимент доступен игрокам и мастеру */
-.shop-toolbar{display:flex}
-.shop-body{display:grid;overflow:auto;max-height:65vh;padding:10px}
+/* Игрок не видит каталог; мастер сохраняет управление ассортиментом */
+.shop-scene-mode:not(.shop-master-mode) .shop-toolbar,
+.shop-scene-mode:not(.shop-master-mode) .shop-body{display:none!important}
+.shop-scene-mode.shop-master-mode .shop-toolbar{display:flex}
+.shop-scene-mode.shop-master-mode .shop-body{display:grid;overflow:auto;max-height:32vh;padding:10px}
 .shop-scene-mode .shop-chat{position:relative;z-index:8;flex:none;margin:0;padding:10px 14px max(10px,env(safe-area-inset-bottom));border-top:1px solid #d6b17655;background:linear-gradient(180deg,#1b191b,#100f13)}
 .shop-scene-mode .shop-chat-log{display:none!important}
 .shop-scene-mode .shop-chat-compose{max-width:900px;margin:0 auto;align-items:stretch}
@@ -184,3 +186,7 @@ body { margin:0; background:var(--bg); color:var(--txt); font:16px/1.4 system-ui
  .shop-scene-mode .shop-chat-compose{gap:6px}
  .shop-scene-mode .shop-chat-send{min-width:74px}
 }
+
+/* Classic shop mode: catalogue only, no merchant scene or chat. */
+.shop-scene,.shop-chat,.shop-merchant-stage,.shop-speech,.shop-showcase{display:none!important}
+.shop-body{display:grid!important;overflow:auto;max-height:65vh;padding:10px}

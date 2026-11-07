@@ -321,7 +321,6 @@ function actionText(a) {
     case 'set_hp': return `ХП ${a.name}: ${a.value != null ? '=' + a.value : (a.delta > 0 ? '+' : '') + a.delta}`;
     case 'describe_location': return `Локация: ${a.name}`;
     case 'open_location': return `Открыть: ${a.name} (${(a.buildings || []).map((b) => b.name || b.type).join(', ')})`;
-    case 'open_island_part': return `Открыть остров отчаяния — часть ${a.part}/3`;
     case 'close_location': return 'Вернуться на карту мира';
     case 'generate_encounter': return `Бой «${a.title}»: ${(a.enemies || []).map((e) => e.name).join(', ')}`;
     default: return a.type;
