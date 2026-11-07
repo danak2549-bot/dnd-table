@@ -719,9 +719,9 @@ const clampPos = (room, x, y) => ({ x: int(x, 0, dims(room).w - 1), y: int(y, 0,
 
 function openIslandPart(room, part) {
   const maps = {
-    1: { name: 'Остров отчаяния — Побережье Забвения', description: 'Дикий берег после кораблекрушения. Среди обломков судов скрываются лагерь выживших, пещеры контрабандистов и старый сигнальный костёр.', art: '/island/part1.png?v=2', spawn: { x: 2, y: 36 } },
-    2: { name: 'Остров отчаяния — Древние Руины', description: 'Затонувшие джунгли, каменные мосты, водопады и храмовый круг. В глубине руин спрятан проход к сердцу острова.', art: '/island/part2.png?v=2', spawn: { x: 2, y: 36 } },
-    3: { name: 'Остров отчаяния — Сердце Острова', description: 'Подземное святилище в вулканической расщелине. Кристаллы питают древний алтарь, а за ним находится логово главной угрозы острова.', art: '/island/part3.png?v=2', spawn: { x: 2, y: 36 } },
+    1: { name: 'Остров отчаяния — Побережье Забвения', description: 'Дикий берег после кораблекрушения. Среди обломков судов скрываются лагерь выживших, пещеры контрабандистов и старый сигнальный костёр.', art: '/island/part1.webp', spawn: { x: 2, y: 36 } },
+    2: { name: 'Остров отчаяния — Древние Руины', description: 'Затонувшие джунгли, каменные мосты, водопады и храмовый круг. В глубине руин спрятан проход к сердцу острова.', art: '/island/part2.webp', spawn: { x: 2, y: 36 } },
+    3: { name: 'Остров отчаяния — Сердце Острова', description: 'Подземное святилище в вулканической расщелине. Кристаллы питают древний алтарь, а за ним находится логово главной угрозы острова.', art: '/island/part3.webp', spawn: { x: 2, y: 36 } },
   };
   const p = maps[part];
   if (!p) return;
@@ -796,6 +796,62 @@ function applyAction(room, a) {
 }
 
 
+async function merchantAnswer(room, building, message, pid) {
+  const category = SHOP_BY_BUILDING[building.type];
+  const kingdom = shopKingdom(room.scene);
+  const merchant = merchantProfile(room.scene, building);
+  const available = shopItems(room, category, pid);
+  const lower = message.toLocaleLowerCase('ru');
+  if (/торг|скидк|подешев|уступ|сбрось цену/.test(lower)) {
+    const target = available.find((x) => lower.includes(x.name.toLocaleLowerCase('ru')) ||
+      x.name.toLocaleLowerCase('ru').split(/[—–-]/)[0].trim().length > 4 && lower.includes(x.name.toLocaleLowerCase('ru').split(/[—–-]/)[0].trim()));
+    if (!target) return { reply: 'Могу обсудить цену. Назови конкретный предмет, за который хочешь поторговаться.', merchant };
+    room.shopBargainsUsed ||= {};
+    room.shopBargainsUsed[pid] ||= {};
+    if (room.shopBargainsUsed[pid][target.id]) return { reply: `За «${target.name}» я уже уступал. Повторной скидки на этот предмет не будет.`, merchant };
+    room.shopBargainsUsed[pid][target.id] = true;
+    room.shopDeals ||= {}; room.shopDeals[pid] ||= {};
+    room.shopDeals[pid][target.id] = 5;
+    save(room);
+    return { reply: `Ладно, договорились: скидка 5% на «${target.name}». Новая цена — ${Math.max(1, Math.floor(target.basePrice * (100 - Math.max(target.discount,5)) / 100)).toLocaleString('ru-RU')} зм. Скидка действует до покупки.`,
+      items: shopItems(room, category, pid), merchant };
+  }
+  const inventory = available.slice(0, 140).map((x) => ({
+    name: x.name, category: x.category, price: x.price, stock: x.stock,
+    description: x.description, damage: x.damage, armorClass: x.armorClass,
+    spell: x.spell, spellLevel: x.spellLevel, manaCost: x.manaCost,
+  }));
+  const system = `Ты — ${merchant.name}, ${merchant.raceLabel}, ${merchant.role} в магазине «${merchant.shop}» королевства ${kingdom}. Внешность: ${merchant.appearance}. Характер и манера: ${merchant.description} Общайся как постоянный персонаж этого мира: помни контекст текущего разговора, отвечай естественно, можешь поддерживать короткую беседу и задавать уместные вопросы. Отвечай только по-русски. Тебе доступен только этот ассортимент: ${JSON.stringify(inventory)}. Отвечай на вопросы о наличии, свойствах и сравнении только по этим данным. Не выдумывай предметы, характеристики, цены, наличие и события. Не меняй баланс, инвентарь, запас и цены. Покупка возможна только кнопкой «Купить» с подтверждением. Торг проводится отдельным запросом и скидка не может превышать 5% один раз на предмет.`;
+  const chatKey = `${String(pid || 'guest')}|${merchant.id}`;
+  room.shopChats ||= {};
+  const history = Array.isArray(room.shopChats[chatKey]) ? room.shopChats[chatKey].slice(-10) : [];
+  const messages = [...history, { role: 'user', content: message }];
+  let reply = '';
+  if (GROQ_KEY) {
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + GROQ_KEY },
+      body: JSON.stringify({ model: GROQ_MODEL, max_tokens: 450, temperature: 0.55,
+        messages: [{ role: 'system', content: system }, ...messages] }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data?.error?.message || 'Торговец временно недоступен');
+    reply = String(data.choices?.[0]?.message?.content || 'Пока не могу ответить.').slice(0, 1600);
+  } else if (KEY) {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: MODEL, max_tokens: 450, system,
+        messages: messages.map((m) => ({ role: m.role, content: m.content })) }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data?.error?.message || 'Торговец временно недоступен');
+    reply = (data.content || []).filter((x) => x.type === 'text').map((x) => x.text).join('\n').slice(0, 1600);
+  } else {
+    reply = `Я ${merchant.name}, ${merchant.raceLabel}. В этой лавке ${available.length} товаров королевства ${kingdom}. Могу подсказать свойства, сравнить цены и наличие. Для покупки нажми «Купить» у выбранного предмета.`;
+  }
+  room.shopChats[chatKey] = [...messages, { role: 'assistant', content: reply }].slice(-12);
+  save(room);
+  return { reply, merchant };
+}
 
 // ---------- сокеты ----------
 io.on('connection', (socket) => {
@@ -913,7 +969,7 @@ io.on('connection', (socket) => {
     if (!building || !category) return ack({ ok: false, error: 'Это здание не является магазином' });
     const token = myTok(r);
     ack({ ok: true, building: building.name, buildingType: building.type, category,
-      kingdom: shopKingdom(r.scene),
+      kingdom: shopKingdom(r.scene), merchant: merchantProfile(r.scene, building),
       items: shopItems(r, category, socket.data.pid),
       gold: token ? int(token.character.gold, 0, 2000000000) : null, isMaster: master() });
   }));
