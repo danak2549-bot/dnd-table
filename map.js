@@ -42,7 +42,7 @@ export function clampView(view, W, H) {
 }
 
 export function drawMap(canvas, state, selId, view, now = performance.now()) {
-  const { w, h } = state.scene ? state.scene : state.map;
+  const { w, h } = state.map;
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.clientWidth || 360;
   const cell = W / w, H = cell * h;
@@ -73,12 +73,11 @@ export function drawMap(canvas, state, selId, view, now = performance.now()) {
 
 export function cellFromEvent(canvas, state, e, view) {
   const r = canvas.getBoundingClientRect();
-  const mapSize = state.scene ? state.scene : state.map;
-  const cell = r.width / mapSize.w;
+  const cell = r.width / state.map.w;
   const wx = (e.clientX - r.left - view.x) / view.s, wy = (e.clientY - r.top - view.y) / view.s;
   return {
-    x: Math.max(0, Math.min(mapSize.w - 1, Math.floor(wx / cell))),
-    y: Math.max(0, Math.min(mapSize.h - 1, Math.floor(wy / cell))),
+    x: Math.max(0, Math.min(state.map.w - 1, Math.floor(wx / cell))),
+    y: Math.max(0, Math.min(state.map.h - 1, Math.floor(wy / cell))),
   };
 }
 export const hitToken = (state, c) => [...state.tokens].reverse().find((t) => t.x === c.x && t.y === c.y) || [...state.tokens].reverse().find((t) => t.x === c.x && t.y === c.y + 1) || null;

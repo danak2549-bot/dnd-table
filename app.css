@@ -87,6 +87,13 @@ body { margin:0; background:var(--bg); color:var(--txt); font:16px/1.4 system-ui
 .shop-admin{display:grid;grid-template-columns:auto minmax(50px,1fr) auto minmax(50px,1fr) auto minmax(50px,1fr) auto;gap:5px;align-items:center;margin-top:10px}
 .shop-admin label{font-size:.75rem;color:var(--dim,#aaa)}
 .shop-admin-num{min-width:0;width:100%;padding:7px}
+.shop-chat{border-top:1px solid #ffffff20;margin-top:16px;padding-top:10px}
+.shop-chat-log{display:flex;flex-direction:column;gap:6px;max-height:160px;overflow:auto;padding:8px;background:#0002;border-radius:8px}
+.shop-chat-line{padding:7px 9px;border-radius:8px;background:#ffffff0d;font-size:.88rem;white-space:pre-wrap}
+.shop-chat-line.player{align-self:flex-end;background:#8d744522}
+.shop-chat-compose{display:flex;gap:8px;margin-top:8px}
+.shop-chat-input{flex:1;min-width:0}
+@media(max-width:560px){.shop-panel{padding:11px}.shop-toolbar .sheet-btn{flex:1}.shop-admin{grid-template-columns:1fr 1fr}.shop-chat-compose{flex-direction:column}.shop-chat-send{width:100%}}
 
 
 .shop-custom-form{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:12px;margin-bottom:10px;border:1px dashed #ffffff44;border-radius:10px}
@@ -97,7 +104,12 @@ body { margin:0; background:var(--bg); color:var(--txt); font:16px/1.4 system-ui
 
 
 
-
+/* ===== Сцена торговца: игрок видит NPC и облако реплики ===== */
+.shop-modal.shop-scene-mode {
+  background: rgba(5,6,10,.94);
+  padding: 0;
+  backdrop-filter: blur(7px);
+}
 .shop-scene-mode .shop-panel {
   position:relative;display:flex;flex-direction:column;
   width:min(1180px,100%);height:min(94vh,940px);max-height:94vh;

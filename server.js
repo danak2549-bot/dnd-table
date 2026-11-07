@@ -717,33 +717,8 @@ function npcSay(room, t, text) {
 const byName = (room, n) => Object.values(room.tokens).find((t) => t.name.toLowerCase() === String(n).toLowerCase());
 const clampPos = (room, x, y) => ({ x: int(x, 0, dims(room).w - 1), y: int(y, 0, dims(room).h - 1) });
 
-function openIslandPart(room, part) {
-  const maps = {
-    1: { name: 'Остров отчаяния — Побережье Забвения', description: 'Дикий берег после кораблекрушения. Среди обломков судов скрываются лагерь выживших, пещеры контрабандистов и старый сигнальный костёр.', art: '/island/part1.webp', spawn: { x: 2, y: 36 } },
-    2: { name: 'Остров отчаяния — Древние Руины', description: 'Затонувшие джунгли, каменные мосты, водопады и храмовый круг. В глубине руин спрятан проход к сердцу острова.', art: '/island/part2.webp', spawn: { x: 2, y: 36 } },
-    3: { name: 'Остров отчаяния — Сердце Острова', description: 'Подземное святилище в вулканической расщелине. Кристаллы питают древний алтарь, а за ним находится логово главной угрозы острова.', art: '/island/part3.webp', spawn: { x: 2, y: 36 } },
-  };
-  const p = maps[part];
-  if (!p) return;
-  openScene(room, { name: p.name, kind: 'village', culture: 'human' });
-  room.scene.name = p.name;
-  room.scene.id = 'island-despair-' + part;
-  room.scene.w = 20; room.scene.h = 40;
-  room.scene.art = p.art;
-  room.scene.buildings = [];
-  room.scene.spawn = { ...p.spawn };
-  room.scene.tiles = Array.from({ length: 40 }, () => '.'.repeat(20));
-  for (const t of Object.values(room.tokens)) if (t.type !== 'player') t.away = true;
-  for (const t of Object.values(room.tokens)) if (t.type === 'player' && !t.benched) Object.assign(t, freeCell(room));
-  room.location = { name: p.name, description: p.description };
-  log(room, `Открыта часть ${part}/3: ${p.name}`, 'story');
-}
-
 function applyAction(room, a) {
   switch (a.type) {
-    case 'open_island_part':
-      openIslandPart(room, int(a.part, 1, 3, 1));
-      break;
     case 'move_token': {
       const t = byName(room, a.name); if (!t) return;
       Object.assign(t, clampPos(room, a.x, a.y));
@@ -1052,6 +1027,7 @@ io.on('connection', (socket) => {
     ack({ ok: true, item: shopItemView(r, item) });
   }));
 
+
   socket.on('token:move', safe(({ id, x, y }, ack) => {
     const r = room(); const t = r?.tokens[id];
     if (!t || (!master() && t.owner !== socket.data.pid)) return ack({ ok: false });
@@ -1202,17 +1178,6 @@ io.on('connection', (socket) => {
 
   socket.on('master:ai', safe(async ({ text }, ack) => {
     const r = room(); if (!r || !master()) return ack({ ok: false, error: 'Только для мастера' });
-    const command = String(text || '').toLocaleLowerCase('ru').replace(/ё/g, 'е');
-    if (/острова? отчаян|остров отчаян|острове отчаян/.test(command)) {
-      const partMatch = command.match(/(?:част(?:ь|и)\s*)?(1|2|3|первая|первую|вторая|вторую|третья|третью)/);
-      if (partMatch) {
-        const word = partMatch[1];
-        const part = ({ '1': 1, 'первая': 1, 'первую': 1, '2': 2, 'вторая': 2, 'вторую': 2, '3': 3, 'третья': 3, 'третью': 3 })[word];
-        applyAction(r, { type: 'open_island_part', part });
-        emitState(r);
-        return ack({ ok: true, reply: `Открыта ${part}-я часть острова отчаяния. Карта уже показана всем игрокам.`, actions: [] });
-      }
-    }
     try { ack({ ok: true, ...(await askClaude(r, str(text, 2000))) }); }
     catch (e) { ack({ ok: false, error: e.message }); }
   }));
